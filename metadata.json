@@ -1,0 +1,7 @@
+{
+  "name": "new 劇本殺表達學院",
+  "description": "透過劇本殺遊戲提升您的表達與溝通技巧。包含專業教學、問卷追蹤與實時表現回饋。",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
