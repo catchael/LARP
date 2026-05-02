@@ -14,6 +14,7 @@ interface EvidenceModalProps {
   setAllCollectedEvidence: React.Dispatch<React.SetStateAction<(Evidence & { locationId?: string; locationName?: string })[]>>;
   backpackCapacity: number;
   activeSearchRoomId: string | null;
+  scriptId: number;
 }
 
 export const EvidenceModal: React.FC<EvidenceModalProps> = ({
@@ -27,6 +28,7 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
   setAllCollectedEvidence,
   backpackCapacity,
   activeSearchRoomId,
+  scriptId,
 }) => {
   if (!selectedEvidence && !viewingEvidence) return null;
 
@@ -78,7 +80,7 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
               <button
                 onClick={() => {
                   if (backpack.length < backpackCapacity) {
-                    const enrichedItem = { ...item, locationId: activeSearchRoomId || undefined, locationName: activeSearchRoomId ? ROOMS[activeSearchRoomId].name : undefined };
+                    const enrichedItem = { ...item, locationId: activeSearchRoomId || undefined, locationName: activeSearchRoomId ? ROOMS[scriptId]?.[activeSearchRoomId]?.name : undefined };
                     setBackpack([...backpack, enrichedItem]);
                     setAllCollectedEvidence(prev => {
                       if (prev.some(e => e.id === item.id)) return prev;

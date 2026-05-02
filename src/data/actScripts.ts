@@ -15,6 +15,8 @@ import {
   NarrationParagraph,
   NARRATIONS_SCRIPT1_PROLOGUE,
   NARRATIONS_SCRIPT1_ACT2,
+  NARRATIONS_SCRIPT2_PROLOGUE,
+  NARRATIONS_SCRIPT2_ACT2,
 } from './narrations';
 
 // ─── Beat 類型 ─────────────────────────────────────────────
@@ -185,13 +187,61 @@ export const ACT_SCRIPT_1_ACT2: Act = {
 };
 
 // ═══════════════════════════════════════════════════════════
-// 劇本 2、3...（預留）
+// 劇本 2：黑傘下妄想殺機 (或是你自訂的劇本名稱)
 // ═══════════════════════════════════════════════════════════
-// export const ACT_SCRIPT_2_PROLOGUE: Act = { ... };
+
+export const ACT_SCRIPT_2_PROLOGUE: Act = {
+  id: 'script2_prologue', // 🌟 對應 App.tsx 裡的設定
+  title: '序章',
+  // 你可以為第二個劇本設定專屬的背景顏色
+  backgroundImage: 'linear-gradient(160deg, #1e1b4b 0%, #0f172a 40%, #000000 100%)', 
+  beats: buildBeats({
+    narrations: NARRATIONS_SCRIPT2_PROLOGUE, // 🌟 綁定第二個劇本的文案
+    pauseAfterEach: false,
+    // 💡 注意：這裡的 'n7' 代表最後一段的 id，請根據你 narrations.ts 裡實際的最後一段 id 修改（例如可能是 'n5' 或 'n8'）
+    pauseLabel: (id) => (id === 'n7' ? '進入角色選擇' : '繼續'),
+    dialogueAfter: {},
+  }),
+};
+
+export const ACT_SCRIPT_2_ACT2: Act = {
+  id: 'script2_act2',
+  title: '第二幕：(你的標題)',
+  backgroundImage: 'linear-gradient(135deg, #1e1b4b 0%, #1e293b 100%)',
+  beats: buildBeats({
+    narrations: NARRATIONS_SCRIPT2_ACT2,
+    pauseAfterEach: false,
+    pauseLabel: (id) => (id === 'n7' ? '開始搜查' : '繼續'), // 假設 n7 是最後一段
+    dialogueAfter: {
+      n1_2: [
+        {
+          characterName: '朴警官', 
+          defaultLine: '嗨嗨',
+          prompt: '【請開麥發言】困惑地詢問另外兩人來這裡的目的，記住別洩漏自己的秘密。',
+          micFallbackDelay: 8000,
+        },
+        {
+          characterName: '尹夫人',
+          defaultLine: 'holy',
+          prompt: '【請開麥發言】解釋自己為什麼要來這裡，想辦法在藏住目的的情況下證明自己是被邀請的。',
+          micFallbackDelay: 8000,
+        },
+        {
+          characterName: '老張',
+          defaultLine: 'heyheyhey',
+          prompt: '【請開麥發言】解釋自己為什麼要來這裡，記得假裝自己剛到，可以拿出證據。',
+          micFallbackDelay: 8000,
+        }
+      ],
+    },
+  })
+};
 
 // ─── 統一匯出索引 ─────────────────────────────────────────
 
 export const ACT_REGISTRY: Record<string, Act> = {
   [ACT_SCRIPT_1_PROLOGUE.id]: ACT_SCRIPT_1_PROLOGUE, // 'script1_prologue'
   [ACT_SCRIPT_1_ACT2.id]: ACT_SCRIPT_1_ACT2,         // 'script1_act2'
+  [ACT_SCRIPT_2_PROLOGUE.id]: ACT_SCRIPT_2_PROLOGUE,
+  [ACT_SCRIPT_2_ACT2.id]: ACT_SCRIPT_2_ACT2,
 };

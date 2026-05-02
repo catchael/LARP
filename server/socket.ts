@@ -45,6 +45,7 @@ type AppPhase =
   | 'login' | 'intro' | 'survey' | 'lobby' | 'teaching'
   | 'script_lobby' | 'script_detail' | 'room_lobby'
   | 'character_preview' | 'game_profile' | 'mission_briefing'
+  | 'diary_reveal'
   | 'game_search' | 'search_end' | 'game_meeting' | 'game_voting'
   | 'game_ending' | 'truth_revealed';
 
@@ -79,6 +80,7 @@ interface Room {
   meetingReadyUsers?: Set<string>;
   moreDiscussionVotes?: Record<string, boolean>;
   turnsPassed?: number;
+  readyUsers?: Set<string>;
 }
 
 // ── 常數 ──────────────────────────────────────────────────
@@ -136,6 +138,14 @@ function getPublicRooms(scriptId: number) {
       hostEmail: r.users.find(u => u.isHost)?.email || '未知',
       currentPlayers: r.users.length,
     }));
+}
+
+// 🌟 決定「第一次討論結束後」要走哪個 phase（劇本 2 多一個發放日記）
+function getNextRoundStartPhase(scriptId: number): { phase: AppPhase; duration: number } {
+  if (scriptId === 2) {
+    return { phase: 'diary_reveal', duration: 120 };
+  }
+  return { phase: 'game_search', duration: 300 };
 }
 
 // ── Socket.IO 初始化（需傳入 io 實例）────────────────────
@@ -213,17 +223,19 @@ export function registerSocketHandlers(io: Server) {
 
     room.phase = phase;
     room.users.forEach(u => u.isReady = false);
+    room.readyUsers = new Set();
 
     if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
 
     // 🌟 核心修正：當地圖階段開始時的處理
     if (phase === 'game_search') {
       if (room.currentRound === 1) {
-        room.phaseEndTime = undefined; // 第一輪先不倒數，等第二幕演完
-        room.currentActId = 'script1_act2';
+        room.phaseEndTime = undefined;
+        const act2Id = `script${room.scriptId}_act2`;   // 🌟 動態
+        room.currentActId = act2Id;
         room.currentActBeatIndex = 0;
         room.actBeatReady = new Set<string>();
-        io.to(roomId).emit('act_started', { actId: 'script1_act2', beatIndex: 0 });
+        io.to(roomId).emit('act_started', { actId: act2Id, beatIndex: 0 });
       } else {
         // 🌟 第二輪搜查：不演戲，直接開始 5 分鐘搜查倒數！
         room.phaseEndTime = Date.now() + durationSeconds * 1000;
@@ -318,10 +330,11 @@ export function registerSocketHandlers(io: Server) {
     room.phaseEndTime = Date.now() + 300 * 1000;
     room.phaseTimeout = setTimeout(() => { 
       if (room.currentRound === 1) {
-        room.currentRound = 2;
-        startPhase(roomId, 'game_search', 300);
+        const next = getNextRoundStartPhase(room.scriptId);
+        // 🌟 如果直接進第二輪搜查（沒日記），就要 +1 回合
+        if (next.phase === 'game_search') room.currentRound = 2;
+        startPhase(roomId, next.phase, next.duration);
       } else {
-        // 🌟 關鍵修改：第二輪延長的討論只要時間一到，絕對不問了，直接進投票！
         startPhase(roomId, 'game_voting', 180);
       }
     }, 300 * 1000);
@@ -354,6 +367,13 @@ export function registerSocketHandlers(io: Server) {
   function autoNextPhase(roomId: string) {
     const room = rooms.get(roomId)!;
     if (!room) return;
+
+    // 🌟 新增：日記環節時間到，將回合設為 2，並進入第二次地圖搜查
+    if (room.phase === 'diary_reveal') {
+      room.currentRound = 2;
+      startPhase(roomId, 'game_search', 300); // 第二次搜查給 5 分鐘
+      return;
+    }
 
     const phaseOrder: AppPhase[] = [
       'room_lobby', 'character_preview', 'game_profile',
@@ -626,10 +646,26 @@ export function registerSocketHandlers(io: Server) {
       const room = rooms.get(currentRoomId);
       if (!room) return;
       const user = room.users.find(u => u.id === socket.id);
+      
       if (user) {
-        user.isReady = true;
+        user.isReady = true; // 👈 補上這行：正確更新使用者的就緒狀態，前端才抓得到勾勾
+
+        if (!room.readyUsers) room.readyUsers = new Set();
+        room.readyUsers.add(user.email);
+        
+        const playingCount = room.users.filter(u => u.connectionStatus !== 'offline' && u.assignedCharacter).length;
         io.to(currentRoomId).emit('room_state', getRoomState(currentRoomId));
-        if (room.users.every(u => u.isReady)) autoNextPhase(currentRoomId);
+
+        if (room.readyUsers.size >= playingCount) {
+          // 新增：如果大家都提早看完日記，直接進第二輪地圖
+          if (room.phase === 'diary_reveal') {
+            if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
+            room.currentRound = 2;
+            startPhase(currentRoomId, 'game_search', 300);
+          } else {
+            autoNextPhase(currentRoomId);
+          }
+        }
       }
     });
 
@@ -929,7 +965,7 @@ socket.on('end_act', () => {
       io.to(room.id).emit('act_ended', { actId: endedActId });
 
       // 🌟 只有當第二幕結束時，才正式啟動地圖的 300 秒搜查倒數！
-      if (endedActId === 'script1_act2' && room.phase === 'game_search') {
+      if (endedActId?.endsWith('_act2') && room.phase === 'game_search') {
         const searchDuration = 300; 
         room.phaseEndTime = Date.now() + searchDuration * 1000;
         
@@ -1044,8 +1080,9 @@ socket.on('end_act', () => {
             }
           } else if (room.meetingStage === 'free_discussion') {
             if (room.currentRound === 1) {
-              room.currentRound = 2;
-              startPhase(currentRoomId, 'game_search', 300);
+              const next = getNextRoundStartPhase(room.scriptId);
+              if (next.phase === 'game_search') room.currentRound = 2;
+              startPhase(currentRoomId, next.phase, next.duration);
             } else {
               startPhase(currentRoomId, 'game_voting', 180);
             }

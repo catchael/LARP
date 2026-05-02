@@ -19,6 +19,7 @@ interface CharacterTraitsPanelProps {
    */
   canUnlock: boolean;
   onAddTraitToNote?: (title: string, content: string) => void;
+  scriptId: number;
 }
 
 export const CharacterTraitsPanel: React.FC<CharacterTraitsPanelProps> = ({
@@ -27,10 +28,11 @@ export const CharacterTraitsPanel: React.FC<CharacterTraitsPanelProps> = ({
   onUnlockAdvanced,
   canUnlock,
   onAddTraitToNote,
+  scriptId,
 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const traits = CHARACTER_TRAITS[characterName];
+  const traits = CHARACTER_TRAITS[scriptId]?.[characterName];
   if (!traits) return null;
 
   const isAdvancedUnlocked = unlockedCharacters.includes(characterName);

@@ -3,6 +3,8 @@ import { motion } from 'motion/react';
 import { ArrowLeft, Clock, ShoppingCart, Briefcase, BookOpen } from 'lucide-react';
 import { RoomState, User, cn } from '../types';
 import { ROOMS } from '../gameData';
+import { CharacterMessageBubble } from '../components/CharacterMessageBubble';
+import { SEARCH_MESSAGES } from '../data/searchMessages';
 
 interface GameSearchScreenProps {
   previewScript: any | null;
@@ -47,6 +49,17 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
 }) => {
   if (!previewScript || !roomState) return null;
 
+  // 🌟 新增：取得當前劇本 ID 與房間資料
+  const scriptId = roomState.scriptId ?? 1;
+  const currentRoom = activeSearchRoomId ? ROOMS[scriptId]?.[activeSearchRoomId] : null;
+
+  // 🌟 取得當前玩家的角色與內心訊息
+  const currentRound = (roomState as any).currentRound ?? 1;
+  const myUser = roomState.users.find(u => u.email === user?.email);
+  const myCharacterName = myUser?.assignedCharacter ?? '';
+  const myCharacter = previewScript.characters.find((c: any) => c.name === myCharacterName);
+  const myMessages = SEARCH_MESSAGES[scriptId]?.[currentRound]?.[myCharacterName] ?? [];
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -66,11 +79,11 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
           <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-5 relative z-20 shrink-0">
             <div className="space-y-2">
               <h2 className="text-3xl font-bold text-white font-serif tracking-widest border-l-4 border-red-900/80 pl-4">
-                {ROOMS[activeSearchRoomId].name}
+                 {currentRoom?.name ?? ''}
               </h2>
               <div className="flex items-center gap-4">
                 <p className="text-slate-500 font-mono text-sm">
-                  SEARCH PHASE - {ROOMS[activeSearchRoomId].floor} {ROOMS[activeSearchRoomId].name}
+                  SEARCH PHASE - {currentRoom?.floor ?? ''} {currentRoom?.name ?? ''}
                 </p>
                 <div className="flex items-center gap-2 px-3 py-1 bg-red-950/30 border border-red-900/50 rounded-full text-red-400 font-mono text-sm animate-pulse">
                   <Clock size={14} />
@@ -118,6 +131,17 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
           {/* 平面圖區域：佔滿全畫面，按鈕以 z-index 浮在上層 */}
           <div className="absolute inset-0">
             {floorPlan}
+            {/* 🌟 新增：左上場景資訊卡下方的角色內心泡泡 */}
+            {myMessages.length > 0 && (
+              <div className="absolute top-[300px] left-6 z-30 pointer-events-none">
+                <CharacterMessageBubble
+                  avatar={myCharacter?.image}
+                  characterName={myCharacterName}
+                  messages={myMessages}
+                  autoPlayKey={`${scriptId}_${currentRound}_${myCharacterName}`}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

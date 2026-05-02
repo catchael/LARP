@@ -2,7 +2,6 @@
 // LARP 發言分析引擎
 // ═══════════════════════════════════════════════════════════
 
-import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import db from "./db.js";
 import {
@@ -45,42 +44,47 @@ class RateLimiter {
 // ── Analysis Engine ───────────────────────────────────────
 
 export class LARPEngine {
-  private geminiClient: GoogleGenAI;
   private groqClient: OpenAI;
-  private groqLimiter = new RateLimiter(20); // 保守：免費 30/min
+  private nvidiaClient: OpenAI; // 👈 新增 Nvidia Client
+  private groqLimiter = new RateLimiter(20); 
   private jobStore = new Map<string, any>();
 
   constructor() {
-    this.geminiClient = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY || "" });
     this.groqClient = new OpenAI({
       apiKey: process.env.GROQ_API_KEY || "",
       baseURL: "https://api.groq.com/openai/v1",
     });
+    
+    // 👈 初始化 Nvidia Client (使用 OpenAI 相容模式)
+    this.nvidiaClient = new OpenAI({
+      apiKey: process.env.NVIDIA_API_KEY || "",
+      baseURL: "https://integrate.api.nvidia.com/v1",
+    });
   }
 
-  private async groq(prompt: string, json = false, retries = 3): Promise<any> {
+  // 替換原本的 private async nvidia 函數
+  private async nvidia(prompt: string, json = false, modelName = "meta/llama-3.1-8b-instruct", retries = 3): Promise<any> {
     for (let i = 0; i < retries; i++) {
       try {
-        await this.groqLimiter.acquire();
-        const res = await this.groqClient.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
+        const res = await this.nvidiaClient.chat.completions.create({
+          model: modelName,
           messages: [
-            { role: "system", content: json ? "你是一個只輸出合法 JSON 的分析助手，不使用 markdown。" : "你是一個分析助手。" },
+            // 根據 json 參數決定要不要強制輸出 JSON
+            { role: "system", content: json ? "你是一個嚴格依照要求格式輸出合法 JSON 的分析助手，不要使用 markdown 標記。" : "你是一個專業的分析助手。" },
             { role: "user", content: prompt }
           ],
           ...(json ? { response_format: { type: "json_object" as const } } : {}),
-          temperature: 0.5,
-          max_tokens: 3000,
+          temperature: 0.2, 
+          max_tokens: 2048, // 確保輸出的字數夠長，不會被截斷
         });
         const text = res.choices[0].message.content || "";
         return json ? JSON.parse(text) : text;
       } catch (e: any) {
-        if (e?.status === 429 && i < retries - 1) {
-          const wait = 10000 * Math.pow(2, i);
-          console.warn(`[Groq] 429 rate limit, retry in ${wait / 1000}s`);
-          await new Promise(r => setTimeout(r, wait));
+        if (i < retries - 1) {
+          console.warn(`[Nvidia] API 請求失敗，準備重試...`, e?.message);
+          await new Promise(r => setTimeout(r, 5000 * Math.pow(2, i)));
         } else {
-          console.error(`[Groq] Error:`, e?.message);
+          console.error(`[Nvidia] Error:`, e?.message);
           return json ? { error: String(e?.message) } : "";
         }
       }
@@ -88,54 +92,35 @@ export class LARPEngine {
     return json ? { error: "retries exhausted" } : "";
   }
 
-  private async gemini(prompt: string, modelName = "gemini-2.0-flash", retries = 3): Promise<any> {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const res = await this.geminiClient.models.generateContent({
-          model: modelName,
-          contents: prompt,
-          config: { responseMimeType: "application/json" },
-        });
-        const text = res.text || "";
-        return JSON.parse(text);
-      } catch (e: any) {
-        if (i < retries - 1) {
-          await new Promise(r => setTimeout(r, 5000 * Math.pow(2, i)));
-        } else {
-          console.error(`[Gemini] Error:`, e?.message);
-          return { error: String(e?.message) };
-        }
-      }
-    }
-    return { error: "retries exhausted" };
-  }
-
   async analyseTurn(raw: string): Promise<any> {
-    // Layer 0: STT 修復
-    let repaired = await this.groq(P0_STT.replace("{raw}", raw));
+    // ⚠️ 這裡全部改成 this.nvidia
+    
+    // Layer 0: STT 修復 (因為前面 routes.ts 已經做過一次修復，若這裡想當作防呆，請設定 json = false)
+    let repaired = await this.nvidia(P0_STT.replace("{raw}", raw), false);
     if (!repaired || typeof repaired !== "string") repaired = raw;
 
-    // Layer 1: 黃金答案
-    let golden = await this.groq(P1_GOLDEN.replace("{repaired}", repaired));
+    // Layer 1: 黃金答案 (純文字輸出，json = false)
+    let golden = await this.nvidia(P1_GOLDEN.replace("{repaired}", repaired), false);
     if (!golden || typeof golden !== "string") golden = repaired;
 
-    // Layer 2: 四大分析師（並行，共 4 次 Groq calls）
+    // Layer 2: 四大分析師 (需要輸出 JSON，json = true)
     const [r2, r3, r4, r5] = await Promise.all([
-      this.groq(P2_LOGIC.replace("{repaired}", repaired).replace("{golden}", golden), true),
-      this.groq(P3_COGNITIVE.replace("{repaired}", repaired).replace("{golden}", golden), true),
-      this.groq(P4_NEWBIE.replace("{repaired}", repaired), true),
-      this.groq(P5_STRUCTURE.replace("{repaired}", repaired).replace("{golden}", golden), true),
+      this.nvidia(P2_LOGIC.replace("{repaired}", repaired).replace("{golden}", golden), true),
+      this.nvidia(P3_COGNITIVE.replace("{repaired}", repaired).replace("{golden}", golden), true),
+      this.nvidia(P4_NEWBIE.replace("{repaired}", repaired), true),
+      this.nvidia(P5_STRUCTURE.replace("{repaired}", repaired).replace("{golden}", golden), true),
     ]);
 
-    // Layer 3: 雙審判官（並行，Gemini 不佔 Groq 額度）
+    // Layer 3: 雙審判官
     const judgePrompt = P_JUDGE
       .replace("{repaired}", repaired).replace("{golden}", golden)
       .replace("{r2}", JSON.stringify(r2)).replace("{r3}", JSON.stringify(r3))
       .replace("{r4}", JSON.stringify(r4)).replace("{r5}", JSON.stringify(r5));
 
+    // 雙裁判評分 (需要 JSON，並且可以指定不同大小的模型交叉評分)
     const [jA, jB] = await Promise.all([
-      this.gemini(judgePrompt, "gemini-2.5-flash"),
-      this.gemini(judgePrompt, "gemini-2.0-flash"),
+      this.nvidia(judgePrompt, true, "meta/llama-3.3-70b-instruct"), 
+      this.nvidia(judgePrompt, true, "deepseek-ai/deepseek-v4-pro"), 
     ]);
 
     return { raw, repaired, golden, reports: { logic: r2, cognitive: r3, newbie: r4, structure: r5 }, verdicts: { a: jA, b: jB } };

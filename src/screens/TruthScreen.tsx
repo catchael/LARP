@@ -17,6 +17,7 @@ interface TruthScreenProps {
   toggleMic: () => void;
   meetingUsers?: MeetingUser[];
   isKillerCaught: boolean;
+  scriptId: number;
 }
 
 type DocumentType = 'story' | 'killer' | null;
@@ -47,6 +48,7 @@ export const TruthScreen: React.FC<TruthScreenProps> = ({
   toggleMic,
   meetingUsers = [],
   isKillerCaught,
+  scriptId,
 }) => {
   const [activeDoc, setActiveDoc] = useState<DocumentType>(null);
   const activeSpeakers = meetingUsers.filter(u => u.isMicOn);
@@ -241,7 +243,7 @@ export const TruthScreen: React.FC<TruthScreenProps> = ({
                 }}
               >
                 <pre className={`text-sm leading-7 font-serif whitespace-pre-wrap break-words ${T.docContentText}`}>
-                  {activeDoc === 'story' ? STORY_TRUTH_CONTENT : KILLER_DETECTION_CONTENT}
+                  {activeDoc === 'story' ? STORY_TRUTH_CONTENT[scriptId] : KILLER_DETECTION_CONTENT[scriptId]}
                 </pre>
               </motion.div>
             </div>

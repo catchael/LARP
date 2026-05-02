@@ -8,9 +8,15 @@ import { RoomState, RoomUser, User, AppPhase, cn } from '../types';
 import { SCRIPTS } from '../data/scripts';
 import { SpeechHelperPanel } from '../components/SpeechHelperPanel';
 import { CharacterTraitsPanel } from '../components/CharacterTraitsPanel';
-import { NARRATIONS_SCRIPT1_PROLOGUE, NARRATIONS_SCRIPT1_ACT2 } from '../data/narrations';
+import { 
+  NARRATIONS_SCRIPT1_PROLOGUE, 
+  NARRATIONS_SCRIPT1_ACT2, 
+  NARRATIONS_SCRIPT2_PROLOGUE, 
+  NARRATIONS_SCRIPT2_ACT2 
+} from '../data/narrations';
 import { CHARACTER_PROFILES } from '../data/profileContent';
 import { PERSONAL_MISSIONS } from '../data/personalMissions';
+import { DIARY_CONTENT } from '../data/diaryContent';
 
 export interface CharacterNote {
   id: string;
@@ -642,6 +648,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                   }}
                                 >
                                   <CharacterTraitsPanel
+                                    scriptId={Number(roomState?.scriptId) || 1}
                                     characterName={char.name}
                                     unlockedCharacters={unlockedCharacterAdvanced}
                                     onUnlockAdvanced={() => {}}    
@@ -876,27 +883,48 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
               // 🌟 1. 取得自己的角色名稱與對應的專屬檔案
               const myUser = roomState?.users.find(u => u.email === user?.email);
               const myCharacterName = myUser?.assignedCharacter || '';
-              const myProfile = CHARACTER_PROFILES[myCharacterName];
+              const myProfile = (CHARACTER_PROFILES as any)[myCharacterName]; // 👈 加上 as any
 
-              // 🌟 2. 建立動態文本清單 (先只放序章)
+              // 🌟 2. 修改：根據劇本 ID 自動選擇序章文案
+              const currentScriptId = Number((roomState as any)?.scriptId) || 1;
+              const prologueData = currentScriptId === 2 ? NARRATIONS_SCRIPT2_PROLOGUE : NARRATIONS_SCRIPT1_PROLOGUE;
+
               const dynamicInfoTexts: any[] = [
                 { 
                   id: 'info_prologue', 
                   title: '序章劇情', 
-                  content: NARRATIONS_SCRIPT1_PROLOGUE.map(p => p.text).join('\n\n'), 
-                  type: 'other' // 公開資訊
+                  content: prologueData.map(p => p.text).join('\n\n'), 
+                  type: 'other' 
                 }
               ];
 
               // 🌟 3. 判斷階段：只有在進入搜查階段（含）以後，才發放第二幕資訊
               const isAct2Finished = ['game_search', 'search_end', 'game_meeting', 'game_voting', 'truth_revealed'].includes(roomState?.phase || '');
               if (isAct2Finished) {
+                // 🌟 根據劇本 ID 自動切換第二幕文案
+                const act2Data = currentScriptId === 2 ? NARRATIONS_SCRIPT2_ACT2 : NARRATIONS_SCRIPT1_ACT2;
                 dynamicInfoTexts.push({ 
                   id: 'info_act2', 
                   title: '第二幕劇情', 
-                  content: NARRATIONS_SCRIPT1_ACT2.map(p => p.text).join('\n\n'), 
-                  type: 'other' // 公開資訊
+                  content: act2Data.map(p => p.text).join('\n\n'), 
+                  type: 'other' 
                 });
+              }
+
+              // 🌟 4. 修改：強制轉換 Number 防呆
+              if (Number((roomState as any)?.scriptId) === 2 && Number((roomState as any)?.currentRound) >= 2) {
+                const diary = (DIARY_CONTENT as any)[2];
+                if (diary) {
+                  // 把日記的每一頁當作一篇文本加入
+                  diary.pages.forEach((page: any, idx: number) => {
+                    dynamicInfoTexts.push({
+                      id: `diary_page_${idx}`,
+                      title: `【日記】${page.title}`,
+                      content: page.content,
+                      type: 'other' // 'other' 代表歸類在「其他公開資訊」
+                    });
+                  });
+                }
               }
 
               // 若有找到該角色的私密檔案，則加入到「個人專屬」中
@@ -904,13 +932,13 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                 dynamicInfoTexts.push({
                   id: 'info_profile1',
                   title: myProfile.profile1.title,
-                  content: myProfile.profile1.sections.map(s => `【${s.heading}】\n${s.content}`).join('\n\n'),
+                  content: myProfile.profile1.sections.map((s: any) => `【${s.heading}】\n${s.content}`).join('\n\n'),
                   type: 'personal'
                 });
                 dynamicInfoTexts.push({
                   id: 'info_profile2',
                   title: myProfile.profile2.title,
-                  content: myProfile.profile2.sections.map(s => `【${s.heading}】\n${s.content}`).join('\n\n'),
+                  content: myProfile.profile2.sections.map((s: any) => `【${s.heading}】\n${s.content}`).join('\n\n'),
                   type: 'personal'
                 });
               }
@@ -965,10 +993,15 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                               key={item.id}
                               draggable
                               onDragStart={(e) => {
+                                // 將文本內容轉為純文字，移除可能的 HTML 標籤 (例如：日記本裡的 highlight <span>)
+                                const tempDiv = document.createElement("div");
+                                tempDiv.innerHTML = item.content;
+                                const plainTextContent = tempDiv.textContent || tempDiv.innerText || "";
+                                
                                 e.dataTransfer.setData('application/json', JSON.stringify({
                                   id: item.id,
                                   type: 'text',
-                                  content: `[${item.title}：${item.content}]`
+                                  content: `[文本資訊] ${item.title}：\n${plainTextContent}`
                                 }));
                               }}
                               onClick={() => {
@@ -1151,7 +1184,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
               const characterName = myUser?.assignedCharacter || '';
               
               // 🌟 2. 從 personalMissions.ts 取得專屬任務
-              const personalMission = PERSONAL_MISSIONS[characterName];
+              const personalMission = (PERSONAL_MISSIONS as any)[characterName];
               
               // 若找不到則給予防呆預設值
               const mainTasks = personalMission?.mainTasks || ['找出真兇：還原案發當天的真相，並找出殺害死者的真正兇手。'];
@@ -1276,8 +1309,16 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
             style={{ width: `${currentVolume}%` }}
           />
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 z-10" />
-          <div className="text-slate-300 text-lg leading-relaxed font-medium line-clamp-2 px-4 relative z-10">
-            {subtitles[subtitles.length - 1]}
+          {/* 將原本顯示字幕的行替換成以下狀態提示 */}
+          <div className="text-slate-300 text-lg font-medium px-4 relative z-10 flex items-center gap-3">
+            {isMicOn ? (
+              <>
+                <Mic2 size={18} className="animate-pulse text-emerald-400" /> 
+                <span className="text-emerald-400">發言錄製中...</span>
+              </>
+            ) : (
+              <span className="text-slate-500">等待發言...</span>
+            )}
           </div>
         </div>
 

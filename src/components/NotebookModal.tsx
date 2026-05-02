@@ -21,9 +21,14 @@ import { Evidence } from '../gameData';
 import { SCRIPTS } from '../data/scripts';
 import { CharacterNote } from '../screens/GameMeetingScreen';
 import { CharacterTraitsPanel } from '../components/CharacterTraitsPanel';
-import { NARRATIONS_SCRIPT1_PROLOGUE, NARRATIONS_SCRIPT1_ACT2 } from '../data/narrations';
+import { 
+  NARRATIONS_SCRIPT1_PROLOGUE, 
+  NARRATIONS_SCRIPT1_ACT2, 
+  NARRATIONS_SCRIPT2_PROLOGUE, 
+  NARRATIONS_SCRIPT2_ACT2 
+} from '../data/narrations';
 import { CHARACTER_PROFILES } from '../data/profileContent';
-
+import { DIARY_CONTENT } from '../data/diaryContent';
 interface NotebookModalProps {
   isNotebookOpen: boolean;
   setIsNotebookOpen: (v: boolean) => void;
@@ -135,6 +140,9 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
   const myUser = roomState?.users.find(u => u.email === user?.email);
   const myCharacterIndex = previewScript?.characters.findIndex(c => c.name === myUser?.assignedCharacter) ?? 0;
   const myCharacter = previewScript?.characters[myCharacterIndex];
+
+  // 🌟 新增：整份檔案共用的 scriptId
+  const currentScriptId = Number((roomState as any)?.scriptId) || 1;
 
   // 🌟 將 privateCustomNodes 也加進去動態組合
   const myInitialNodes = myCharacter?.timeline?.map((t: any) => t.time) || [];
@@ -407,6 +415,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
               {previewScript && (
                 <div className="mb-8">
                   <CharacterTraitsPanel
+                    scriptId={currentScriptId}
                     characterName={previewScript.characters[selectedNotebookChar]?.name ?? ''}
                     unlockedCharacters={unlockedCharacterAdvanced}
                     onUnlockAdvanced={onUnlockCharacterAdvanced}
@@ -589,29 +598,33 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
           // 🌟 1. 取得自己的角色名稱與對應的專屬檔案
           const myUser = roomState?.users.find(u => u.email === user?.email);
           const myCharacterName = myUser?.assignedCharacter || '';
-          const myProfile = CHARACTER_PROFILES[myCharacterName];
+          
+          // 🌟 改：用 scriptId 雙層 key 抓
+          const myProfile = CHARACTER_PROFILES[currentScriptId]?.[myCharacterName];
 
-          // 🌟 2. 建立動態文本清單 (先只放序章)
+          // 🌟 2. 動態載入對應序章
+          const prologueData = currentScriptId === 2 ? NARRATIONS_SCRIPT2_PROLOGUE : NARRATIONS_SCRIPT1_PROLOGUE;
+
           const dynamicInfoTexts: any[] = [
             { 
               id: 'info_prologue', 
               title: '序章劇情', 
-              content: NARRATIONS_SCRIPT1_PROLOGUE.map(p => p.text).join('\n\n'), 
-              type: 'other' // 公開資訊
+              content: prologueData.map(p => p.text).join('\n\n'), 
+              type: 'other' 
             }
           ];
 
           // 🌟 3. 判斷階段：只有在進入搜查階段（含）以後，才發放第二幕資訊
           const isAct2Finished = ['game_search', 'search_end', 'game_meeting', 'game_voting', 'truth_revealed'].includes(roomState?.phase || '');
           if (isAct2Finished) {
+            const act2Data = currentScriptId === 2 ? NARRATIONS_SCRIPT2_ACT2 : NARRATIONS_SCRIPT1_ACT2;
             dynamicInfoTexts.push({ 
               id: 'info_act2', 
               title: '第二幕劇情', 
-              content: NARRATIONS_SCRIPT1_ACT2.map(p => p.text).join('\n\n'), 
-              type: 'other' // 公開資訊
+              content: act2Data.map(p => p.text).join('\n\n'), 
+              type: 'other' 
             });
           }
-
           if (myProfile) {
             dynamicInfoTexts.push({
               id: 'info_profile1',
@@ -635,6 +648,21 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
               content: myCharacter.timeline.map((t: any) => `【${t.time}】\n${t.event}`).join('\n\n'),
               type: 'personal'
             });
+          }
+
+          // 🌟 修改：強制將變數轉為 Number，且 type 改為 'other'
+          if (currentScriptId === 2 && Number((roomState as any)?.currentRound) >= 2) {
+            const diary = DIARY_CONTENT[2];
+            if (diary) {
+              diary.pages.forEach((page: any, idx: number) => {
+                dynamicInfoTexts.push({
+                  id: `diary_note_${idx}`,
+                  title: `【日記線索】${page.title}`,
+                  content: page.content,
+                  type: 'other' // 🌟 關鍵：這裡必須是 'other'
+                });
+              });
+            }
           }
 
           const currentList = dynamicInfoTexts.filter(t => t.type === infoSubTab);

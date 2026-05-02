@@ -38,9 +38,9 @@ export type AppPhase =
   | 'login' | 'intro' | 'survey' | 'lobby' | 'teaching'
   | 'script_lobby' | 'script_detail' | 'room_lobby'
   | 'character_preview' | 'game_profile' | 'mission_briefing'
+  | 'diary_reveal' // 🌟 加上這行
   | 'game_search' | 'search_end' | 'game_meeting' | 'game_voting'
-  | 'game_ending' // 🌟 把它加進這裡！
-  | 'truth_revealed';
+  | 'game_ending' | 'truth_revealed';
 
 export interface RoomUser {
   id: string;

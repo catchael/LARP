@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════
 // 伺服器入口
 // ═══════════════════════════════════════════════════════════
+import "dotenv/config"; 
 
 import express from "express";
 import { createServer as createViteServer } from "vite";
@@ -8,8 +9,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { Server } from "socket.io";
 import http from "http";
-import * as dotenv from "dotenv";
-dotenv.config();
 
 import apiRouter from "./server/routes.js";
 import { registerSocketHandlers } from "./server/socket.js";

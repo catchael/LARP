@@ -9,7 +9,8 @@ interface RoomViewProps {
   collectedCoins: string[];
   setCollectedCoins: React.Dispatch<React.SetStateAction<string[]>>;
   setCoinCount: React.Dispatch<React.SetStateAction<number>>;
-  allCollectedEvidence: Evidence[]
+  allCollectedEvidence: Evidence[];
+  scriptId:number;
 }
 
 export const RoomView: React.FC<RoomViewProps> = ({
@@ -19,10 +20,22 @@ export const RoomView: React.FC<RoomViewProps> = ({
   collectedCoins,
   setCollectedCoins,
   setCoinCount,
-  allCollectedEvidence
+  allCollectedEvidence,
+  scriptId
 }) => {
   if (!activeSearchRoomId) return null;
-  const room = ROOMS[activeSearchRoomId];
+  const room = ROOMS[scriptId]?.[activeSearchRoomId];
+
+  // 🌟 暫時加這行看 console
+  console.log('[RoomView Debug]', { 
+    scriptId, 
+    activeSearchRoomId, 
+    hasRoom: !!room,
+    scriptIdType: typeof scriptId,
+    availableRoomsInScript: ROOMS[scriptId] ? Object.keys(ROOMS[scriptId]) : 'NO_SCRIPT',
+  });
+
+  if (!room) return null;   // 🌟 新增防呆
 
   return (
     <div className="relative w-full h-full min-h-[500px] bg-slate-950/50 rounded-xl border border-slate-800 overflow-hidden">

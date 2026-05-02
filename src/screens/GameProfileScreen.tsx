@@ -56,7 +56,8 @@ export const GameProfileScreen: React.FC<GameProfileScreenProps> = ({
     previewScript.characters.find(c => c.name === myUser?.assignedCharacter) ||
     previewScript.characters[0];
 
-  const profileContent = CHARACTER_PROFILES[character.name];
+  const scriptId = roomState?.scriptId ?? previewScript?.id ?? 1;
+  const profileContent = CHARACTER_PROFILES[scriptId]?.[character.name];
 
   const goTo = (next: number) => {
     setDir(next > page ? 1 : -1);

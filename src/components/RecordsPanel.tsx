@@ -27,8 +27,8 @@ interface RecordsPanelProps {
   assessmentReports: AssessmentReport[];
   expandedRecord: number | null;
   setExpandedRecord: (id: number | null) => void;
-  expandedReport: number | null;
-  setExpandedReport: (id: number | null) => void;
+  onOpenReport: (report: any) => void;
+  myCharacter?: string;
 }
 
 export const RecordsPanel: React.FC<RecordsPanelProps> = ({
@@ -42,8 +42,8 @@ export const RecordsPanel: React.FC<RecordsPanelProps> = ({
   assessmentReports,
   expandedRecord,
   setExpandedRecord,
-  expandedReport,
-  setExpandedReport,
+  onOpenReport,
+  myCharacter,
 }) => {
   const selectedSurvey = surveys.find(s => s.id === selectedSurveyId) || surveys[0];
 
@@ -91,7 +91,7 @@ export const RecordsPanel: React.FC<RecordsPanelProps> = ({
       </button>
 
       <button
-        onClick={() => setRecordsView('reports')}
+        onClick={() => onOpenReport({ id: 'list' })} 
         className="w-full p-6 bg-amber-50 hover:bg-amber-100 rounded-2xl border border-amber-100 flex items-center justify-between group transition-all"
       >
         <div className="flex items-center gap-4">
@@ -135,10 +135,10 @@ export const RecordsPanel: React.FC<RecordsPanelProps> = ({
                 >
                   <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
                     {record.dialogue.map((msg, idx) => (
-                      <div key={idx} className={`flex flex-col ${msg.speaker === '玩家' ? 'items-end' : 'items-start'}`}>
+                      <div key={idx} className={`flex flex-col ${msg.speaker === myCharacter ? 'items-end' : 'items-start'}`}>
                         <span className="text-[10px] font-bold text-slate-400 mb-1">{msg.speaker}</span>
                         <div className={`px-3 py-2 rounded-2xl text-sm max-w-[85%] ${
-                          msg.speaker === '玩家'
+                          msg.speaker === myCharacter
                             ? 'bg-indigo-600 text-white rounded-tr-none'
                             : 'bg-white text-slate-700 border border-slate-200 rounded-tl-none'
                         }`}>
@@ -256,60 +256,13 @@ export const RecordsPanel: React.FC<RecordsPanelProps> = ({
     </div>
   );
 
-  const renderReports = () => (
-    <div className="p-6 space-y-4">
-      {assessmentReports.length === 0 ? (
-        <p className="text-sm text-slate-400 italic p-4 bg-slate-50 rounded-xl">尚無評估報告</p>
-      ) : (
-        assessmentReports.map((report) => (
-          <div key={report.id} className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
-            <button
-              onClick={() => setExpandedReport(expandedReport === report.id ? null : report.id)}
-              className="w-full p-4 flex items-center justify-between bg-white hover:bg-slate-50 transition-colors"
-            >
-              <div className="text-left">
-                <div className="font-bold text-slate-800">表達能力分析報告</div>
-                <div className="text-xs text-slate-400">{new Date(report.created_at).toLocaleString()}</div>
-              </div>
-              {expandedReport === report.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-            </button>
-            <AnimatePresence>
-              {expandedReport === report.id && (
-                <motion.div
-                  initial={{ height: 0 }}
-                  animate={{ height: 'auto' }}
-                  exit={{ height: 0 }}
-                  className="overflow-hidden bg-slate-50 border-t border-slate-100"
-                >
-                  <div className="p-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(report.report_data.scores || {}).map(([key, val]: [string, any]) => (
-                        <div key={key} className="bg-white p-2 rounded-lg border border-slate-100">
-                          <div className="text-[10px] uppercase text-slate-400 font-bold">{key}</div>
-                          <div className="text-sm font-bold text-indigo-600">{val}%</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-sm text-slate-700 bg-white p-3 rounded-lg border border-slate-200">
-                      {report.report_data.summary}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        ))
-      )}
-    </div>
-  );
-
   return (
     <motion.div
       initial={{ x: '100%' }}
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200"
+      className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-[200] flex flex-col border-l border-slate-200"
     >
       <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -336,7 +289,6 @@ export const RecordsPanel: React.FC<RecordsPanelProps> = ({
         {recordsView === 'menu' && renderMenu()}
         {recordsView === 'scripts' && renderScripts()}
         {recordsView === 'surveys' && renderSurveys()}
-        {recordsView === 'reports' && renderReports()}
       </div>
     </motion.div>
   );

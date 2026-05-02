@@ -26,8 +26,9 @@ export const MissionBriefingScreen: React.FC<MissionBriefingScreenProps> = ({
   const me = roomState?.users.find(u => u.email === user?.email);
   const myCharacterName = me?.assignedCharacter ?? '';
   const character = previewScript?.characters.find(c => c.name === myCharacterName);
-  const mission = PERSONAL_MISSIONS[myCharacterName];
-
+  const scriptId = roomState?.scriptId ?? previewScript?.id ?? 1;
+  const mission = PERSONAL_MISSIONS[scriptId]?.[myCharacterName];
+  
   if (!character || !mission) {
     return (
       <div className="text-slate-400 text-center">

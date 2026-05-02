@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserCircle, AlertTriangle, LogOut, Check, CheckCircle2, Mic, MicOff, Clock } from 'lucide-react';
+import { UserCircle, AlertTriangle, LogOut, Check, CheckCircle, CheckCircle2, Mic, MicOff, Clock, ClipboardList } from 'lucide-react';
 import { User, Survey, AppPhase, TeachingModule, ScriptRecord, AssessmentReport, RoomState, cn } from './types';
 import { Evidence } from './gameData';
 import { io, Socket } from 'socket.io-client';
 
 // Data
 import { SCRIPTS } from './data/scripts';
+import { DIARY_CONTENT } from './data/diaryContent';
 
 // Screens
 import { LoginScreen } from './screens/LoginScreen';
@@ -28,7 +29,9 @@ import { VotingScreen } from './screens/VotingScreen';
 import { VoteRevealScreen } from './screens/VoteRevealScreen';
 import { GameEndingScreen } from './screens/GameEndingScreen';
 import { TruthScreen } from './screens/TruthScreen';
-import { CHARACTER_TO_ENDING_ID, TIE_ENDING_ID, TRUE_KILLER_NAME } from './data/endingScripts';
+// 把原本的 TIE_ENDING_ID 改成 TIE_ENDING_IDS
+import { CHARACTER_TO_ENDING_ID, TRUE_KILLERS, TIE_ENDING_IDS } from './data/endingScripts';
+import { DiaryRevealScreen } from './screens/DiaryRevealScreen';
 
 // Components
 import { ExitModal } from './components/ExitModal';
@@ -41,9 +44,16 @@ import { Backpack } from './components/Backpack';
 import { NotebookModal } from './components/NotebookModal';
 import { EvidenceModal } from './components/EvidenceModal';
 import { ShopModal } from './components/ShopModal';
+import { Mascot } from './components/Mascot';
+import { ReportPage } from './components/ReportModal';
+
 
 export default function App() {
+  const scriptIdRef = useRef<number>(1);
   const [phase, setPhase] = useState<AppPhase>('login');
+  // 🌟 新增：用來控制問卷彈窗的顯示，以及記住剛玩完的劇本名稱
+  const [showSurveyPrompt, setShowSurveyPrompt] = useState(false);
+  const [lastPlayedScript, setLastPlayedScript] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [surveys, setSurveys] = useState<Survey[]>([]);
@@ -58,8 +68,10 @@ export default function App() {
   const [selectedSurveyId, setSelectedSurveyId] = useState<number | null>(null);
   const [scriptRecords, setScriptRecords] = useState<ScriptRecord[]>([]);
   const [assessmentReports, setAssessmentReports] = useState<AssessmentReport[]>([]);
+  const [analyzingState, setAnalyzingState] = useState<'idle' | 'analyzing' | 'ready'>('idle');
+  const [readyReport, setReadyReport] = useState<any>(null);
+  const [viewingFullReport, setViewingFullReport] = useState<any>(null);
   const [expandedRecord, setExpandedRecord] = useState<number | null>(null);
-  const [expandedSurvey, setExpandedSurvey] = useState<number | null>(null);
   const [expandedReport, setExpandedReport] = useState<number | null>(null);
   const [previewScript, setPreviewScript] = useState<typeof SCRIPTS[0] | null>(null);
   const [showScriptIntro, setShowScriptIntro] = useState(false);
@@ -98,8 +110,11 @@ export default function App() {
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
 
   const [isMicOn, setIsMicOn] = useState(false);
-  const [speakingUser, setSpeakingUser] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<string[]>(['系統：歡迎來到會議室，請開始討論。']);
+  // 🌟 新增：跨輪次累積的完整字幕紀錄（不會在進入會議室時被清空）
+  const [allRoundsTranscript, setAllRoundsTranscript] = useState<{ round: number; line: string }[]>([]);
+  const currentRoundRef = useRef<number>(1);
+
   const [currentVolume, setCurrentVolume] = useState(0);
   const [currentCPM, setCurrentCPM] = useState(0);
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -195,9 +210,113 @@ export default function App() {
   const recognitionActiveRef = useRef(false);
   const isMicRequestingRef = useRef(false); // ✅ 防止重複請求麥克風
   const lastSubtitleSetAt = useRef(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const roomStateRef = useRef<RoomState | null>(null);
+  const hasSavedDialogueRef = useRef(false);
+  useEffect(() => { roomStateRef.current = roomState; }, [roomState]);
 
+  // 🌟 累積這局所有發言
+  const dialogueRef = useRef<{ speaker: string; text: string }[]>([]);
   const me = roomState?.users.find(u => u.email === user?.email);
   const isHost = !!me?.isHost;
+
+  // 監聽麥克風開關，控制錄音與上傳
+  useEffect(() => {
+    if (isMicOn && localStreamRef.current && phase === 'game_meeting') {
+      const stream = localStreamRef.current;
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (audioChunksRef.current.length === 0) return;
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // ✅ 從 ref 讀取最新狀態，避免 stale closure
+        const currentRoom = roomStateRef.current;
+        const myUser = currentRoom?.users.find(u => u.email === user?.email);
+        const myCharName = myUser?.assignedCharacter || user?.email || '';
+        const scriptId = currentRoom?.scriptId || 1;
+
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'turn.webm');
+        formData.append('character', myCharName);
+        formData.append('scriptId', String(scriptId));
+        formData.append('userId', String(user?.id));
+
+        try {
+          const res = await fetch('/api/process-voice-turn', {
+            method: 'POST',
+            body: formData
+          });
+          // ✅ 讀取回應並記錄到 dialogue
+          const data = await res.json();
+          if (data.success && data.text) {
+            setSubtitles(prev => [...prev, data.text]);
+            dialogueRef.current.push({ speaker: myCharName, text: data.text });
+            appendToTranscript(data.text); // 👈 補這行，確保路徑 B 也有資料
+          }
+        } catch (e) {
+          console.error("發言上傳失敗", e);
+        }
+      };
+
+      mediaRecorder.start();
+    } else if (!isMicOn && mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  }, [isMicOn, phase, user?.id]);
+
+  // 🌟 修改：控制吉祥物「飛出來幾秒就回去」的廣播事件
+  useEffect(() => {
+    // 只有在大廳才需要這些邏輯
+    if (phase !== 'lobby') {
+      window.dispatchEvent(new CustomEvent('mascot-alert', { detail: null }));
+      return;
+    }
+
+    if (analyzingState === 'analyzing') {
+      // 剛開始分析，飛到中央
+      window.dispatchEvent(new CustomEvent('mascot-alert', {
+        detail: { message: "分析報告正在生成中，等好了，鳥會提醒你啾！", isCentered: true }
+      }));
+      
+      // 4秒後飛回原本位置，並清空特殊訊息（恢復預設狀態）
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('mascot-alert', {
+          detail: { message: "", isCentered: false } 
+        }));
+      }, 4000);
+      return () => clearTimeout(timer);
+      
+    } else if (analyzingState === 'ready') {
+      // 分析完成，再次飛到中央提醒
+      window.dispatchEvent(new CustomEvent('mascot-alert', {
+        detail: { message: `你的《${lastPlayedScript}》劇本分析出爐了！現在要看嗎~`, isCentered: true }
+      }));
+      
+      // 5秒後飛回原本位置，改成小提示
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('mascot-alert', {
+          detail: { message: "點擊下方的按鈕可以查看報告喔！", isCentered: false } 
+        }));
+      }, 5000);
+      return () => clearTimeout(timer);
+      
+    } else {
+      window.dispatchEvent(new CustomEvent('mascot-alert', { detail: null }));
+    }
+  }, [phase, analyzingState, lastPlayedScript]);
+
+  // 🌟 新增：把 currentRound 映射到 ref，方便在 setter callback 裡讀
+  useEffect(() => {
+    currentRoundRef.current = (roomState as any)?.currentRound ?? 1;
+  }, [roomState]);
 
   // 🌟 每次進入搜查階段時清空當前背包（跨回合累計紀錄保留在 allCollectedEvidence）
   useEffect(() => {
@@ -249,6 +368,7 @@ export default function App() {
     setTimelineEvents({});
     setCharacterNotes([]);
     setSubtitles(['系統：歡迎來到會議室，請開始討論。']);
+    setAllRoundsTranscript([]);
     setMeetingTab('clues');
     setIsNotebookOpen(false);
     setIsBackpackOpen(false);
@@ -431,6 +551,7 @@ export default function App() {
       setTurnEndTime(state.turnEndTime || 0);
 
       if (state.scriptId) {
+        scriptIdRef.current = state.scriptId;
         const script = SCRIPTS.find(s => s.id === state.scriptId);
         if (script) setPreviewScript(script);
       }
@@ -490,7 +611,9 @@ export default function App() {
 
       setIsActPlaying(prev => {
         if (!prev) {
-          setCurrentActId('script1_prologue');
+          // 🌟 修改：根據當前房間的劇本 ID 決定序章 ID
+          const scriptId = Number(roomState?.scriptId) || 1;
+          setCurrentActId(`script${scriptId}_prologue`); 
           return true;
         }
         return prev;
@@ -514,6 +637,8 @@ export default function App() {
     });
 
     newSocket.on('voting_finished', (votes: Record<string, string>) => {
+      const currentScriptId = scriptIdRef.current; 
+
       const voteCount: Record<string, number> = {};
       Object.values(votes).forEach(t => { voteCount[t] = (voteCount[t] || 0) + 1; });
       const max = Math.max(...Object.values(voteCount));
@@ -521,25 +646,25 @@ export default function App() {
       const isTie = topChars.length > 1;
 
       if (isTie) {
-        // 🌟 第二輪也平票：算抓不到真兇 → 灰暗結局
         setIsKillerCaught(false);
         setFadeToBlack(true);
         setTimeout(() => {
-          setCurrentActId(TIE_ENDING_ID);
+          // 🌟 修改：根據當前劇本 ID 取得平局結局
+          setCurrentActId(TIE_ENDING_IDS[currentScriptId]);
           setIsActPlaying(true);
         }, 800);
         setTimeout(() => setFadeToBlack(false), 1600);
       } else {
         const winner = topChars[0];
-        // 🌟 真兇被抓 → 明亮結局；冤枉好人 → 灰暗結局
-        setIsKillerCaught(winner === TRUE_KILLER_NAME);
+        setIsKillerCaught(winner === TRUE_KILLERS[currentScriptId]);
         setVotingReveal({ winner, voteCount });
         setTimeout(() => {
           setVotingReveal(null);
           setFadeToBlack(true);
         }, 3500);
         setTimeout(() => {
-          setCurrentActId(CHARACTER_TO_ENDING_ID[winner] ?? TIE_ENDING_ID);
+          // 🌟 修改：最後的防呆備用平局也改為動態獲取
+          setCurrentActId(CHARACTER_TO_ENDING_ID[currentScriptId]?.[winner] ?? TIE_ENDING_IDS[currentScriptId]);
           setIsActPlaying(true);
         }, 4300);
         setTimeout(() => setFadeToBlack(false), 5100);
@@ -831,6 +956,8 @@ export default function App() {
             }
             return newArr.slice(-50);
           });
+          // 🌟 新增：同步寫入跨輪次 transcript
+          appendToTranscript(data.subtitle);
         }
       };
 
@@ -850,6 +977,32 @@ export default function App() {
 
   // 🌟 語音相關階段：角色預覽、個人檔案、搜證、搜證結束、會議室都可以開麥通話
   const isVoicePhase = ['character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed'].includes(phase);
+
+  // 🌟 新增：追加到跨輪次 transcript（修正過度覆蓋的 Bug）
+  const appendToTranscript = (line: string) => {
+    setAllRoundsTranscript(prev => {
+      const round = currentRoundRef.current;
+      const speakerName = line.split('：')[0];
+      const newArr = [...prev];
+      
+      if (newArr.length > 0) {
+        const last = newArr[newArr.length - 1];
+        // 檢查是否為同一人的連續發言
+        if (last.round === round && last.line.startsWith(speakerName + '：')) {
+          // 如果新句子長度比上一句短很多，代表是全新的一句話（麥克風 buffer 重置）
+          if (line.length < last.line.length - 5) {
+            newArr.push({ round, line });
+          } else {
+            // 否則視為同一句話的語音辨識即時更新，直接覆蓋
+            newArr[newArr.length - 1] = { round, line };
+          }
+          return newArr;
+        }
+      }
+      newArr.push({ round, line });
+      return newArr;
+    });
+  };
 
   // 🌟 離開所有語音階段時，關閉麥克風
   useEffect(() => {
@@ -952,35 +1105,51 @@ export default function App() {
 
     let finalBuffer = '';
 
+    let isNewSentence = true; // 新增一個標記，用來追蹤是否該換行
+
     recognition.onresult = (event: any) => {
-      let interim = '';
+      let text = '';
+      let isFinal = false;
+
+      // 只抓取最新的辨識結果，不使用無窮累加的 finalBuffer
       for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalBuffer += event.results[i][0].transcript;
-        } else {
-          interim += event.results[i][0].transcript;
-        }
+        text += event.results[i][0].transcript;
+        if (event.results[i].isFinal) isFinal = true;
       }
-      const text = (finalBuffer + interim).trim();
+      
+      text = text.trim();
       if (!text) return;
 
       const newSubtitle = `${speakerCharacter}：${text}`;
 
-      // 🌟 節流：演戲時最多 4 次/秒，會議室時最多 12 次/秒
-      const now = Date.now();
-      const throttleMs = isActPlaying ? 250 : 80;
-      if (now - lastSubtitleSetAt.current >= throttleMs) {
-        lastSubtitleSetAt.current = now;
-        setSubtitles(prev => {
-          const newArr = [...prev];
-          if (newArr.length > 0 && newArr[newArr.length - 1].startsWith(`${speakerCharacter}：`)) {
-            newArr[newArr.length - 1] = newSubtitle;
-          } else {
-            newArr.push(newSubtitle);
-            finalBuffer = ''; // reset buffer when new utterance segment starts
-          }
-          return newArr.slice(-50);
-        });
+      setSubtitles(prev => {
+        const newArr = [...prev];
+        if (newArr.length > 0 && !isNewSentence) {
+          // 如果還是同一句話，覆蓋最後一行
+          newArr[newArr.length - 1] = newSubtitle;
+        } else {
+          // 如果是新的一句話，新增一行
+          newArr.push(newSubtitle);
+          isNewSentence = false; // 新增後立刻設為 false，後續的 interim 就會覆蓋這行
+        }
+        return newArr.slice(-50);
+      });
+
+      // 🌟 修正後的 transcript 記錄方式
+      setAllRoundsTranscript(prev => {
+        const round = currentRoundRef.current;
+        const newArr = [...prev];
+        if (newArr.length > 0 && !isNewSentence) {
+          newArr[newArr.length - 1] = { round, line: newSubtitle };
+        } else {
+          newArr.push({ round, line: newSubtitle });
+        }
+        return newArr;
+      });
+
+      // 當這句話被系統判定為「結束（isFinal）」時，將標記設為 true，下次就會換行
+      if (isFinal) {
+        isNewSentence = true; 
       }
 
       socket.emit('speaking_data', { subtitle: newSubtitle });
@@ -1025,6 +1194,11 @@ export default function App() {
       const audioContext = audioContextRef.current;
       if (audioContext && audioContext.state === 'suspended') audioContext.resume();
 
+      // 🌟 【修復重點 1】：加上這三行來啟動即時語音辨識
+      const me = roomState?.users.find(u => u.email === user?.email);
+      const myCharName = me?.assignedCharacter || '系統';
+      startRecognition(myCharName, socket);
+
       const analyser = analyserRef.current;
       if (analyser) {
         const bufferLength = analyser.frequencyBinCount;
@@ -1059,12 +1233,6 @@ export default function App() {
           return chars > 0 ? Math.round(chars * (60 / 30)) : prev;
         });
       }, 3000);
-
-      // 🌟 核心修正：讓 STT 支援第二幕演出！只要我有角色名稱且我開著麥克風，就無條件啟動辨識
-      const myCharName = roomState?.users.find(u => u.email === user?.email)?.assignedCharacter;
-      if (!recognitionActiveRef.current && myCharName) {
-          startRecognition(myCharName, socket);
-      }
 
       return () => {
         clearInterval(checkInterval);
@@ -1339,8 +1507,9 @@ export default function App() {
       setCurrentFloor={setCurrentFloor}
       phase={phase}
       setActiveSearchRoomId={setActiveSearchRoomId}
+      scriptId={roomState?.scriptId ?? 1}                          // 🌟 新增
     />
-  ), [currentFloor, phase]); // setCurrentFloor / setActiveSearchRoomId 是穩定的 setter，不需列入
+  ), [currentFloor, phase, roomState?.scriptId]); // setCurrentFloor / setActiveSearchRoomId 是穩定的 setter，不需列入
 
   const roomViewNode = useMemo(() => (
     <RoomView
@@ -1351,8 +1520,9 @@ export default function App() {
       collectedCoins={collectedCoins}
       setCollectedCoins={setCollectedCoins}
       setCoinCount={setCoinCount}
+      scriptId={roomState?.scriptId ?? 1}
     />
-  ), [activeSearchRoomId, backpack, allCollectedEvidence, collectedCoins]);
+  ), [activeSearchRoomId, backpack, allCollectedEvidence, collectedCoins, roomState?.scriptId]);
 
   const backpackNode = (
     <Backpack
@@ -1421,6 +1591,7 @@ export default function App() {
       setAllCollectedEvidence={setAllCollectedEvidence as any}
       backpackCapacity={backpackCapacity}
       activeSearchRoomId={activeSearchRoomId}
+      scriptId={roomState?.scriptId ?? 1} 
     />
   );
 
@@ -1484,13 +1655,56 @@ export default function App() {
           />
         )}
         {phase === 'lobby' && (
-          <LobbyScreen
-            key="lobby"
-            setPhase={setPhase}
-            setActiveModule={setActiveModule}
-            setCurrentPage={setCurrentPage}
-          />
+          <>
+            <LobbyScreen
+              key="lobby"
+              setPhase={setPhase}
+              setActiveModule={setActiveModule}
+              setCurrentPage={setCurrentPage}
+            />
+
+            {/* 🌟 淺色系的提醒橫幅 */}
+            <AnimatePresence>
+              {analyzingState !== 'idle' && (
+                <motion.div
+                  initial={{ y: 50, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 50, opacity: 0 }}
+                  // 👇 主要改了這裡的背景色(bg-white/95)、邊框色(border-slate-200) 與陰影
+                  className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] p-4 flex items-center justify-between px-10 z-[100]"
+                >
+                  <div className="flex items-center gap-3">
+                    {analyzingState === 'analyzing' ? (
+                      // 讀取圈圈改深一點的紫色
+                      <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <CheckCircle size={20} className="text-emerald-500" />
+                    )}
+                    {/* 👇 文字改為深灰色 */}
+                    <span className="text-slate-800 font-bold">
+                      {analyzingState === 'analyzing' ? "分析報告生成中..." : "分析報告出爐！"}
+                    </span>
+                  </div>
+                  
+                  {analyzingState === 'ready' && (
+                    <button
+                      onClick={() => {
+                        setViewingFullReport(readyReport); 
+                        setShowRecordsPanel(false);
+                        setAnalyzingState('idle'); 
+                      }}
+                      // 👇 按鈕稍微加上陰影跟點擊縮放效果
+                      className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 transition-all active:scale-95"
+                    >
+                      點擊查看
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
         )}
+
         {phase === 'teaching' && (
           <TeachingScreen
             key="teaching"
@@ -1681,6 +1895,20 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {phase === 'diary_reveal' && (
+          <DiaryRevealScreen
+            key="diary_reveal"
+            // 🌟 根據當前房間的劇本 ID 動態抓取日記內容
+            diaryTitle={DIARY_CONTENT[roomState?.scriptId || 1]?.title}
+            pages={DIARY_CONTENT[roomState?.scriptId || 1]?.pages || []}
+            isMeReady={!!me?.isReady}
+            onComplete={() => {
+              // 🌟 點擊確認後，送出 ready 訊號給伺服器
+              socket?.emit('player_ready');
+            }}
+          />
+        )}
+
       {phase === 'game_voting' && (
         <VotingScreen
           key="game_voting"
@@ -1694,7 +1922,7 @@ export default function App() {
       {phase === 'game_ending' && (
         <GameEndingScreen
           key="game_ending"
-          isKiller={me?.assignedCharacter === TRUE_KILLER_NAME}
+          isKiller={me?.assignedCharacter === TRUE_KILLERS[roomState?.scriptId || 1]}
           isKillerCaught={isKillerCaught}
           isHost={isHost}
           onNextPhase={() => {
@@ -1706,15 +1934,118 @@ export default function App() {
 
       {phase === 'truth_revealed' && (
         <TruthScreen
-          onLeaveRoom={() => {
+          onLeaveRoom={async () => {
+            const currentScript = SCRIPTS.find((s: any) => s.id === roomState?.scriptId);
+            const scriptTitle = currentScript?.title || '劇本';
+            setLastPlayedScript(scriptTitle);
+
+            const myCharacterName = me?.assignedCharacter ?? '';
+
+            // 🌟 1. 把跨輪次 transcript 按輪次分組
+            const round1 = allRoundsTranscript.filter(t => t.round === 1).map(t => t.line);
+            const round2 = allRoundsTranscript.filter(t => t.round === 2).map(t => t.line);
+
+            // 🌟 2. 打包成完整對話紀錄（給 save-dialogue 用，修正為資料庫預期的 {speaker, text} 格式）
+            const packagedDialogue: { speaker: string; text: string }[] = [];
+            
+            if (round1.length > 0) {
+              packagedDialogue.push({ speaker: '系統', text: '【第一輪討論】' });
+              round1.forEach(line => {
+                const splitIdx = line.indexOf('：');
+                if (splitIdx > -1) {
+                  packagedDialogue.push({ speaker: line.slice(0, splitIdx), text: line.slice(splitIdx + 1).trim() });
+                }
+              });
+            }
+            if (round2.length > 0) {
+              packagedDialogue.push({ speaker: '系統', text: '【第二輪討論】' });
+              round2.forEach(line => {
+                const splitIdx = line.indexOf('：');
+                if (splitIdx > -1) {
+                  packagedDialogue.push({ speaker: line.slice(0, splitIdx), text: line.slice(splitIdx + 1).trim() });
+                }
+              });
+            }
+
+            // 🌟 3. 只抽自己的發言，以「輪次」為單位合併成一整段（給 analyse 用）
+            const extractMyText = (line: string) =>
+              line.startsWith(`${myCharacterName}：`)
+                ? line.split('：').slice(1).join('：').trim()
+                : null;
+
+            const myTurns: string[] = [];
+
+            const round1MyLines = round1
+              .map(extractMyText)
+              .filter((t): t is string => !!t);
+            if (round1MyLines.length > 0) {
+              myTurns.push(`[第一輪]\n${round1MyLines.join('\n')}`);
+            }
+
+            const round2MyLines = round2
+              .map(extractMyText)
+              .filter((t): t is string => !!t);
+            if (round2MyLines.length > 0) {
+              myTurns.push(`[第二輪]\n${round2MyLines.join('\n')}`);
+            }
+
+            // 🌟 4. 玩到結局才送分析（這個 onLeaveRoom 只在 truth_revealed 觸發，本身就是條件）
+            if (user?.id && packagedDialogue.length > 0) {
+              try {
+                await fetch('/api/save-dialogue', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: user.id, scriptName: scriptTitle, dialogue: packagedDialogue }),
+                });
+                fetchRecords(user.id);
+              } catch (e) { console.error('save-dialogue failed', e); }
+            }
+
+            if (user?.id && myTurns.length > 0) {
+              try {
+                setAnalyzingState('analyzing'); // 🌟 狀態設為分析中
+                const res = await fetch('/api/analyse', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: user.id, scriptName: scriptTitle, turns: myTurns }),
+                });
+                const data = await res.json();
+                
+                if (data.jobId) {
+                  // 🌟 開始輪詢
+                  const pollInterval = setInterval(async () => {
+                    const statusRes = await fetch(`/api/analyse/status/${data.jobId}?userId=${user.id}`);
+                    const statusData = await statusRes.json();
+                    
+                    if (statusData.status === 'done') {
+                      clearInterval(pollInterval);
+                      setAnalyzingState('ready');
+                      setReadyReport({ summary: statusData.result.summary, turns: statusData.result.turns });
+                      fetchRecords(user.id); // 重新抓取資料，更新歷史紀錄
+                    } else if (statusData.status === 'error') {
+                      clearInterval(pollInterval);
+                      setAnalyzingState('idle');
+                    }
+                  }, 5000); // 每 5 秒問一次
+                }
+              } catch (e) { console.error('analyse failed', e); setAnalyzingState('idle'); }
+            }
+
+            // 5. 才開始離開
             socket?.emit('leave_room');
             resetRoomState();
-            setPhase('lobby');
+            setShowSurveyPrompt(true);
+
+            // 改成 3 秒備援刷新（以防 save-dialogue 還沒完成就已經看到空列表）
+            if (user?.id) {
+              setTimeout(() => fetchRecords(user.id), 3000);
+            }
           }}
           isMicOn={isMicOn}
           toggleMic={toggleMic}
           meetingUsers={meetingUsers}
           isKillerCaught={isKillerCaught}
+          scriptId={roomState?.scriptId ?? 1}
         />
       )}
 
@@ -1822,8 +2153,11 @@ export default function App() {
             assessmentReports={assessmentReports}
             expandedRecord={expandedRecord}
             setExpandedRecord={setExpandedRecord}
-            expandedReport={expandedReport}
-            setExpandedReport={setExpandedReport}
+            onOpenReport={(report) => {
+              setShowRecordsPanel(false); // 關閉側邊欄
+              setViewingFullReport(report); // 設定要觀看的報告
+            }}
+            myCharacter={roomState?.users.find(u => u.email === user?.email)?.assignedCharacter}
           />
         )}
         {showScriptIntro && (
@@ -1903,6 +2237,77 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* 🌟 遊戲結束後的感謝與問卷引導彈窗 */}
+      <AnimatePresence>
+        {showSurveyPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-slate-900 border border-slate-700 rounded-3xl p-10 max-w-md w-full text-center shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden"
+            >
+              {/* 頂部裝飾背景 */}
+              <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-indigo-900/40 to-transparent pointer-events-none" />
+              
+              <div className="relative z-10">
+                <div className="w-20 h-20 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400 mx-auto mb-6 shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+                  <ClipboardList size={40} />
+                </div>
+                
+                <h2 className="text-3xl font-black text-white mb-4 tracking-wide">
+                  感謝您的遊玩！
+                </h2>
+                
+                <p className="text-slate-300 text-lg mb-8 leading-relaxed">
+                  希望你喜歡<span className="text-amber-400 font-bold mx-1">《{lastPlayedScript}》</span>的故事。<br/><br/>
+                  為了提供更完美的遊戲體驗，請幫我們填寫一份簡短的課後問卷，你的回饋對我們非常重要！
+                </p>
+                
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => {
+                      setShowSurveyPrompt(false);
+                      setPhase('survey'); // 🌟 跳轉到問卷階段
+                    }}
+                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2"
+                  >
+                    <ClipboardList size={20} /> 前往填寫問卷
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowSurveyPrompt(false);
+                      setPhase('lobby'); // 🌟 婉拒填寫，回大廳
+                    }}
+                    className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-xl font-medium transition-colors"
+                  >
+                    稍後再說，先回大廳
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🌟 放在這裡！加在最後一個 </div> 的上方 */}
+      {viewingFullReport && (
+        <div className="fixed inset-0 z-[300] bg-slate-950 overflow-y-auto">
+          <ReportPage
+            reports={assessmentReports}
+            latestReport={viewingFullReport.id ? null : viewingFullReport} 
+            onBack={() => {
+              setViewingFullReport(null);
+              setShowRecordsPanel(true); // 返回時重新打開側邊欄
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

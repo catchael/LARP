@@ -169,7 +169,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
           <div className="glass p-8 rounded-[2.5rem] min-h-[500px] flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                {roomState.assignmentMethod === 'manual' ? '請選擇您的角色' : '等待房主開始遊戲'}
+                {roomState.assignmentMethod === 'manual' ? '劇本中的角色' : '等待房主開始遊戲'}
               </h3>
               <div className="flex -space-x-3">
                 {roomState.users.map((u, i) => (

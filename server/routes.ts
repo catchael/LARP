@@ -5,6 +5,8 @@
 import { Router } from "express";
 import db from "./db.js";
 import { larpEngine } from "./engine.js";
+import multer from "multer";
+import OpenAI from "openai";
 
 const router = Router();
 
@@ -45,7 +47,8 @@ router.post("/survey", (req, res) => {
 router.get("/surveys/:userId", (req, res) => {
   const { userId } = req.params;
   try {
-    const surveys = db.prepare("SELECT * FROM surveys WHERE user_id = ? ORDER BY created_at DESC").all(userId);
+    // 🌟 這裡也補上 || 'Z'
+    const surveys = db.prepare("SELECT id, user_id, data, created_at || 'Z' as created_at FROM surveys WHERE user_id = ? ORDER BY created_at DESC").all(userId);
     res.json({ surveys: surveys.map((s: any) => ({ ...s, data: JSON.parse(s.data as string) })) });
   } catch (err) {
     console.error("Fetch surveys error:", err);
@@ -58,8 +61,9 @@ router.get("/surveys/:userId", (req, res) => {
 router.get("/records/:userId", (req, res) => {
   const { userId } = req.params;
   try {
-    const scripts = db.prepare("SELECT * FROM script_records WHERE user_id = ? ORDER BY created_at DESC").all(userId);
-    const reports = db.prepare("SELECT * FROM assessment_reports WHERE user_id = ? ORDER BY created_at DESC").all(userId);
+    // 🌟 在 created_at 後面 || 'Z'，強制加上時區標籤
+    const scripts = db.prepare("SELECT id, user_id, script_name, dialogue, created_at || 'Z' as created_at FROM script_records WHERE user_id = ? ORDER BY created_at DESC").all(userId);
+    const reports = db.prepare("SELECT id, user_id, report_data, created_at || 'Z' as created_at FROM assessment_reports WHERE user_id = ? ORDER BY created_at DESC").all(userId);
     res.json({
       scripts: scripts.map((s: any) => ({ ...s, dialogue: JSON.parse(s.dialogue as string) })),
       reports: reports.map((r: any) => ({ ...r, report_data: JSON.parse(r.report_data as string) }))
@@ -69,6 +73,16 @@ router.get("/records/:userId", (req, res) => {
     res.status(500).json({ error: "Database error" });
   }
 });
+
+// 設定 multer 接收記憶體中的音檔緩衝區
+const upload = multer({ storage: multer.memoryStorage() });
+
+// 初始化 NVIDIA API 客戶端
+const nvidiaClient = new OpenAI({
+  baseURL: "https://integrate.api.nvidia.com/v1",
+  apiKey: process.env.NVIDIA_API_KEY || "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" 
+});
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "你的_DEEPGRAM_API_KEY_填這裡";
 
 // ── 對話紀錄儲存 ──────────────────────────────────────────
 
@@ -80,6 +94,78 @@ router.post("/save-dialogue", (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Database error" });
+  }
+});
+
+
+// ── 語音處理 (SS + GL) ──────────────────────────────────────────
+router.post("/process-voice-turn", upload.single("audio"), async (req, res) => {
+  try {
+    const audioBuffer = req.file?.buffer;
+    const { character } = req.body;
+
+    if (!audioBuffer) {
+      return res.status(400).json({ error: "沒有接收到音檔" });
+    }
+
+    // 👇 加入這行：將 Buffer 轉換成 Blob
+    const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: 'audio/webm' });
+    
+    // 1. SS 層：打 Deepgram API 將 WebM 轉成文字
+    const dgResponse = await fetch('https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&language=zh-TW', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+        'Content-Type': 'audio/webm'
+      },
+      // 👇 把這裡的 audioBuffer 改成 audioBlob
+      body: audioBlob 
+    });
+    
+    const dgData = await dgResponse.json() as any;
+    const rawText = dgData.results?.channels[0]?.alternatives[0]?.transcript || "";
+    
+    if (!rawText.trim()) {
+      return res.json({ success: true, text: "" }); // 沒講話
+    }
+
+    // 2. GL 層：打 NVIDIA Llama 進行專有名詞修正
+    const globalContext = `
+    劇本背景：韓國新亭洞連環殺人案 (窒息的地下室)。
+    核心實體：新亭洞、陽川區、舊商業大樓、廢棄地下室、廢棄管理室、 清潔水槽、員工置物櫃、破舊洗手間、死角、騎樓、地下一樓、通風口、管理員室、洗手槽、獵奇兔子、尼龍繩、黑色塑膠袋、廉價香菸、木製菸斗、劣質菸草、折疊獵刀、過期細胞檢體、非法物證、隱藏攝影機、鐵撬、雨衣、乾燥砂土、濕袖口、指甲抓痕、粉紅色水痕、崔製作人、張警衛、拾荒者、廣搜隊長、節目助理、連環殺手、前科犯、被害者家屬、目擊證人、替罪羔羊、毒樹果實、追訴期、DNA比對、密室還原、硬核推理、 肉搜、獵巫、勒斃、窒息、棄屍、駭客技術、監聽
+    `;
+    
+    const completion = await nvidiaClient.chat.completions.create({
+      model: "meta/llama-3.1-8b-instruct",
+      messages: [
+        {
+          role: "system",
+          // 🌟 強化 Prompt：嚴厲禁止 AI 刪減字數或總結
+          content: `你是一個專業的繁體中文語音修正器。背景為：${globalContext}。任務：將輸入的錯誤字詞修正為背景中的正確名詞。
+
+【最高指導原則】：
+1. 絕對不可總結、縮減或刪除任何對話內容！必須 100% 完整保留原本的句子長度、廢話與所有細節。
+2. 僅替換掉錯誤的名詞，其餘內容一律原封不動保留。
+3. 直接輸出修正後的全文，不要加任何解釋或開場白。`
+        },
+        {
+          role: "user",
+          content: `請完整保留原意與長度，僅修正名詞。原文如下：\n${rawText}`
+        }
+      ],
+      temperature: 0.1, // 降低溫度，讓 AI 不要擅自發揮創意
+      max_tokens: 8192  // 🌟 將輸出上限拉高到 8192 (NVIDIA API 的極限)，確保長對話不會被截斷
+    });
+
+    const correctedText = completion.choices[0].message.content?.trim() || rawText;
+    const formattedTurn = `${character}：${correctedText}`;
+
+    // 回傳修正後的文字給前端
+    res.json({ success: true, text: formattedTurn });
+
+  } catch (error) {
+    console.error('語音處理發生錯誤:', error);
+    res.status(500).json({ error: "語音處理失敗" });
   }
 });
 
