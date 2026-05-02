@@ -763,7 +763,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
                     className={cn("p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-3", notebookSelectedEvidence?.id === item.id ? "bg-indigo-50 border-indigo-300 shadow-sm" : "bg-white border-slate-200 hover:border-indigo-300 hover:shadow-sm")}
                   >
                     <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center text-slate-600 shrink-0">
-                      <item.icon size={20} />
+                      <item.iconName size={20} />
                     </div>
                     <div className="min-w-0">
                       <div className="font-bold text-sm truncate">{item.name}</div>
@@ -785,7 +785,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
                 <div className="space-y-6">
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center text-slate-700 border border-slate-200 shrink-0">
-                      <notebookSelectedEvidence.icon size={32} />
+                      <notebookSelectedEvidence.iconName size={32} />
                     </div>
                     <div>
                       <h3 className="text-2xl font-bold text-slate-800">{notebookSelectedEvidence.name}</h3>

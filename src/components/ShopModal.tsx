@@ -92,7 +92,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                   backpack.filter(item => item.advancedDetails && !unlockedAdvancedDetails.includes(item.id)).map(item => (
                     <div key={item.id} className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-700">
                       <div className="flex items-center gap-2 overflow-hidden">
-                        <item.icon size={16} className="text-slate-400 shrink-0" />
+                        <item.iconName size={16} className="text-slate-400 shrink-0" />
                         <span className="text-sm text-slate-300 truncate">{item.name}</span>
                       </div>
                       <button

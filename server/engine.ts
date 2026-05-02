@@ -9,6 +9,50 @@ import {
   P4_NEWBIE, P5_STRUCTURE, P_JUDGE,
 } from "./prompts.js";
 
+// ── JSON 清洗工具 ─────────────────────────────────────────
+
+function stripReasoning(text: string): string {
+  // 移除 <think>...</think> 區塊（含跨行）
+  let cleaned = text.replace(/<think[\s\S]*?<\/think>/gi, '');
+  // 移除 JSON 開頭之前的所有東西（例如思考的引言、解釋）
+  const firstBracket = cleaned.search(/[\{\[]/);
+  if (firstBracket > 0) cleaned = cleaned.slice(firstBracket);
+  return cleaned.trim();
+}
+
+function repairJson(text: string): any | null {
+  const firstBrace = text.indexOf('{');
+  if (firstBrace < 0) return null;
+  let s = text.slice(firstBrace);
+
+  // 統計未跳脫的引號數量；奇數代表沒閉合
+  let inString = false, escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\') { escape = true; continue; }
+    if (c === '"') inString = !inString;
+  }
+  if (inString) s += '"';
+
+  // 補齊未閉合的 { [
+  const stack: string[] = [];
+  inString = false; escape = false;
+  for (const c of s) {
+    if (escape) { escape = false; continue; }
+    if (c === '\\') { escape = true; continue; }
+    if (c === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' || c === ']') stack.pop();
+  }
+  while (stack.length) {
+    s += stack.pop() === '{' ? '}' : ']';
+  }
+
+  try { return JSON.parse(s); } catch { return null; }
+}
+
 // ── Rate Limiter ──────────────────────────────────────────
 
 class RateLimiter {
@@ -18,6 +62,10 @@ class RateLimiter {
   private processing = false;
 
   constructor(callsPerMinute: number) {
+    console.log('[NVIDIA KEY 檢查]', 
+    process.env.NVIDIA_API_KEY 
+      ? `已讀到，前 8 碼：${process.env.NVIDIA_API_KEY.slice(0, 8)}` 
+      : '⚠️ 完全空的！');
     this.interval = 60000 / callsPerMinute;
   }
 
@@ -51,34 +99,73 @@ export class LARPEngine {
 
   constructor() {
     this.groqClient = new OpenAI({
-      apiKey: process.env.GROQ_API_KEY || "",
+      apiKey: process.env.GROQ_API_KEY,
       baseURL: "https://api.groq.com/openai/v1",
     });
     
     // 👈 初始化 Nvidia Client (使用 OpenAI 相容模式)
     this.nvidiaClient = new OpenAI({
-      apiKey: process.env.NVIDIA_API_KEY || "",
+      apiKey: process.env.NVIDIA_API_KEY,
       baseURL: "https://integrate.api.nvidia.com/v1",
     });
   }
 
-  // 替換原本的 private async nvidia 函數
-  private async nvidia(prompt: string, json = false, modelName = "meta/llama-3.1-8b-instruct", retries = 3): Promise<any> {
+  private async nvidia(
+    prompt: string, 
+    json = false, 
+    modelName = "meta/llama-3.1-8b-instruct", 
+    retries = 3,
+    maxTokens = 2048,
+  ): Promise<any> {
+    let currentMaxTokens = maxTokens;
+    // 🌟 reasoning 模型清單：要關 thinking
+    const isReasoningModel = modelName.includes("deepseek") || modelName.includes("r1");
+
     for (let i = 0; i < retries; i++) {
       try {
-        const res = await this.nvidiaClient.chat.completions.create({
+        const baseBody: any = {
           model: modelName,
           messages: [
-            // 根據 json 參數決定要不要強制輸出 JSON
-            { role: "system", content: json ? "你是一個嚴格依照要求格式輸出合法 JSON 的分析助手，不要使用 markdown 標記。" : "你是一個專業的分析助手。" },
+            { role: "system", content: json 
+              ? "你是嚴格依照要求格式輸出合法 JSON 的分析助手，不要使用 markdown 標記，不要在 JSON 之外輸出任何文字。" 
+              : "你是一個專業的分析助手。" },
             { role: "user", content: prompt }
           ],
-          ...(json ? { response_format: { type: "json_object" as const } } : {}),
-          temperature: 0.2, 
-          max_tokens: 2048, // 確保輸出的字數夠長，不會被截斷
-        });
-        const text = res.choices[0].message.content || "";
-        return json ? JSON.parse(text) : text;
+          temperature: 0.2,
+          max_tokens: currentMaxTokens,
+        };
+        if (json) baseBody.response_format = { type: "json_object" };
+        // 🌟 reasoning 模型強制關閉思考輸出
+        if (isReasoningModel) baseBody.chat_template_kwargs = { thinking: false };
+
+        const res = await this.nvidiaClient.chat.completions.create(baseBody);
+
+        const choice = res.choices[0];
+        const text = choice.message.content || "";
+        const finishReason = choice.finish_reason;
+
+        // 🌟 截斷偵測：被切尾巴就拉高 max_tokens 重打
+        if (finishReason === "length" && i < retries - 1) {
+          console.warn(`[Nvidia] 輸出被截斷 (max_tokens=${currentMaxTokens})，下一次重試拉高上限`);
+          currentMaxTokens = Math.min(currentMaxTokens * 2, 8192);
+          continue;
+        }
+
+        if (!json) return text;
+
+        // 🌟 ←←← stripReasoning 放這裡！解析 JSON 之前先清一次思考殘渣
+        const cleanText = stripReasoning(text);
+
+        try {
+          return JSON.parse(cleanText);
+        } catch (parseErr) {
+          const repaired = repairJson(cleanText);
+          if (repaired) {
+            console.warn(`[Nvidia] JSON 截斷已修復成功`);
+            return repaired;
+          }
+          throw parseErr;
+        }
       } catch (e: any) {
         if (i < retries - 1) {
           console.warn(`[Nvidia] API 請求失敗，準備重試...`, e?.message);
@@ -92,41 +179,46 @@ export class LARPEngine {
     return json ? { error: "retries exhausted" } : "";
   }
 
-  async analyseTurn(raw: string): Promise<any> {
-    // ⚠️ 這裡全部改成 this.nvidia
-    
-    // Layer 0: STT 修復 (因為前面 routes.ts 已經做過一次修復，若這裡想當作防呆，請設定 json = false)
+  async analyseTurn(raw: string, fullContext = '', targetCharacter = ''): Promise<any> {
     let repaired = await this.nvidia(P0_STT.replace("{raw}", raw), false);
     if (!repaired || typeof repaired !== "string") repaired = raw;
 
-    // Layer 1: 黃金答案 (純文字輸出，json = false)
     let golden = await this.nvidia(P1_GOLDEN.replace("{repaired}", repaired), false);
     if (!golden || typeof golden !== "string") golden = repaired;
 
-    // Layer 2: 四大分析師 (需要輸出 JSON，json = true)
+    // 🌟 把脈絡和角色名都塞進去
+    const fillContext = (p: string) => p
+      .replace("{repaired}", repaired)
+      .replace("{golden}", golden)
+      .replace("{full_context}", fullContext)
+      .replace("{target_character}", targetCharacter);
+
     const [r2, r3, r4, r5] = await Promise.all([
-      this.nvidia(P2_LOGIC.replace("{repaired}", repaired).replace("{golden}", golden), true),
-      this.nvidia(P3_COGNITIVE.replace("{repaired}", repaired).replace("{golden}", golden), true),
-      this.nvidia(P4_NEWBIE.replace("{repaired}", repaired), true),
-      this.nvidia(P5_STRUCTURE.replace("{repaired}", repaired).replace("{golden}", golden), true),
+      this.nvidia(fillContext(P2_LOGIC), true),
+      this.nvidia(fillContext(P3_COGNITIVE), true),
+      this.nvidia(fillContext(P4_NEWBIE), true),
+      this.nvidia(fillContext(P5_STRUCTURE), true),
     ]);
 
-    // Layer 3: 雙審判官
-    const judgePrompt = P_JUDGE
-      .replace("{repaired}", repaired).replace("{golden}", golden)
+    const judgePrompt = fillContext(P_JUDGE)
       .replace("{r2}", JSON.stringify(r2)).replace("{r3}", JSON.stringify(r3))
       .replace("{r4}", JSON.stringify(r4)).replace("{r5}", JSON.stringify(r5));
 
-    // 雙裁判評分 (需要 JSON，並且可以指定不同大小的模型交叉評分)
     const [jA, jB] = await Promise.all([
-      this.nvidia(judgePrompt, true, "meta/llama-3.3-70b-instruct"), 
-      this.nvidia(judgePrompt, true, "deepseek-ai/deepseek-v4-pro"), 
+      this.nvidia(judgePrompt, true, "nvidia/nemotron-3-super-120b-a12b", 3, 4096), 
+      this.nvidia(judgePrompt, true, "deepseek-ai/deepseek-v4-pro", 3, 4096), // 🌟 換掉那個可能不存在的 deepseek-v4-pro
     ]);
 
     return { raw, repaired, golden, reports: { logic: r2, cognitive: r3, newbie: r4, structure: r5 }, verdicts: { a: jA, b: jB } };
   }
 
-  async analyseSession(turns: string[], concurrency = 2): Promise<any> {
+  async analyseSession(
+    turns: string[], 
+    concurrency = 2,
+    fullDialogue?: { speaker: string; text: string }[],
+    targetCharacter?: string,
+  ): Promise<any> {
+    // ⚠️ 以下三行是 acquire/release 的定義，缺一不可！
     const semaphore = { count: 0, max: concurrency, queue: [] as Array<() => void> };
     const acquire = () => new Promise<void>(resolve => {
       if (semaphore.count < semaphore.max) { semaphore.count++; resolve(); }
@@ -137,11 +229,17 @@ export class LARPEngine {
       if (semaphore.queue.length > 0) semaphore.queue.shift()!();
     };
 
+    // 把整局對話格式化成一個字串脈絡，每個 turn 都用得到
+    const contextStr = fullDialogue && fullDialogue.length > 0
+      ? fullDialogue.map(d => `${d.speaker}：${d.text}`).join('\n')
+      : '（無完整對話脈絡）';
+    const characterStr = targetCharacter || '未知角色';
+
     const turnResults = await Promise.all(turns.map(async (t, i) => {
       await acquire();
       console.log(`[Analysis] Turn ${i + 1}/${turns.length}`);
       try {
-        const r = await this.analyseTurn(t);
+        const r = await this.analyseTurn(t, contextStr, characterStr);
         return { ...r, turn: i };
       } finally {
         release();
@@ -161,7 +259,6 @@ export class LARPEngine {
         }
         console.log(`[Analysis] Judge output keys:`, Object.keys(jv));
         console.log(`[Analysis] Judge scores:`, JSON.stringify(jv.scores ?? jv.final_scores ?? 'NOT FOUND'));
-        // 相容 scores 和 final_scores 兩種 key
         const scoreObj = jv.scores ?? jv.final_scores ?? {};
         for (const k of keys) {
           const v = scoreObj[k];
@@ -193,15 +290,21 @@ export class LARPEngine {
   }
 
   // 背景任務管理
-  startJob(jobId: string, userId: number, scriptName: string, turns: string[]) {
+  startJob(
+    jobId: string, 
+    userId: number, 
+    scriptName: string, 
+    turns: string[],
+    fullDialogue?: { speaker: string; text: string }[],
+    targetCharacter?: string,
+  ) {
     this.jobStore.set(jobId, { status: "pending" });
     (async () => {
       try {
         this.jobStore.set(jobId, { status: "running" });
-        const result = await this.analyseSession(turns);
+        const result = await this.analyseSession(turns, 2, fullDialogue, targetCharacter);
         this.jobStore.set(jobId, { status: "done", result, userId, scriptName });
         console.log(`[Analysis] Job ${jobId} done`);
-        // 自動存資料庫
         try {
           db.prepare("INSERT INTO assessment_reports (user_id, report_data) VALUES (?, ?)")
             .run(userId, JSON.stringify({ ...result.summary, job_id: jobId, script_name: scriptName, turns: result.turns }));

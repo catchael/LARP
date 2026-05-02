@@ -99,7 +99,7 @@ export const SpeechHelperPanel: React.FC<SpeechHelperPanelProps> = ({
             <div className="space-y-3">
               {FRAMEWORK_CATEGORIES.map(category => {
                 const isExpanded = expandedCategory === category.id;
-                const Icon = category.icon;
+                const Icon = category.iconName;
                 return (
                   <div key={category.id} className={`border rounded-xl overflow-hidden transition-all duration-300 ${isExpanded ? category.borderColor + ' bg-slate-800/50' : 'border-slate-800 bg-slate-800/20 hover:border-slate-700'}`}>
                     

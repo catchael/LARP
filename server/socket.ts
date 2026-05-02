@@ -512,10 +512,17 @@ export function registerSocketHandlers(io: Server) {
       if (!room) return;
       const user = room.users.find(u => u.id === socket.id);
       if (user) {
-        room.playerStates.set(user.email, state);
-        console.log(`[DEBUG save] 儲存 ${user.email}: backpack=${state.backpack?.length}, notes=${state.characterNotes?.length}, coins=${state.coinCount}`);
-      } else {
-        console.log(`[DEBUG save] 找不到 user! socket.id=${socket.id}, users=${room.users.map(u=>u.id).join(',')}`);
+        // 🌟 把 backpack / allCollectedEvidence 裡的 icon 函式欄位剝掉，只留可序列化的資料
+        const sanitize = (arr: any[]) => 
+          Array.isArray(arr) ? arr.map(({ icon, ...rest }) => rest) : arr;
+        
+        const cleanState = {
+          ...state,
+          backpack: sanitize(state.backpack),
+          allCollectedEvidence: sanitize(state.allCollectedEvidence),
+        };
+        room.playerStates.set(user.email, cleanState);
+        console.log(`[DEBUG save] 儲存 ${user.email}: backpack=${cleanState.backpack?.length}, ...`);
       }
     });
 
@@ -743,8 +750,22 @@ export function registerSocketHandlers(io: Server) {
       } else {
         // 🌟 如果遊戲進行中，觸發「斷線緩衝期」
         user.connectionStatus = 'offline';
-        io.to(roomId).emit('player_disconnected', { email: user.email, timeLimit: 180 }); // 通知前端顯示暫停畫面
-        io.to(roomId).emit('room_state', getRoomState(roomId)); // 更新列表狀態為 offline
+
+        // 🌟 新增：同步處理會議室的座位
+        const meetingIdx = room.meetingUsers.findIndex(u => u.id === socket.id);
+        if (meetingIdx >= 0) {
+          room.meetingUsers[meetingIdx].isMicOn = false;
+          // 注意：保留 email、character、isAI=false，方便 rejoin_room 用 email 找回座位
+          // 但若該玩家正在發言，要立刻把麥克風讓出去，不然整桌會卡 5 秒等 silence_warning
+          if (room.currentSpeakerIndex === meetingIdx) {
+            nextTurn(roomId);
+          } else {
+            broadcastMeetingState(roomId);
+          }
+        }
+
+        io.to(roomId).emit('player_disconnected', { email: user.email, timeLimit: 180 });
+        io.to(roomId).emit('room_state', getRoomState(roomId));
 
         console.log(`[系統] 玩家 ${user.email} 斷線，進入 3 分鐘緩衝期...`);
 
@@ -1218,6 +1239,12 @@ socket.on('end_act', () => {
         lastSpeakingDataBroadcast = now;
         socket.to(currentRoomId).emit('speaking_data', data);
       }
+    });
+
+    // 🌟 接收某人的最終 ASR 結果，廣播給房間裡其他人
+    socket.on('final_transcript', (data: { line: string; round: number }) => {
+      if (!currentRoomId) return;
+      socket.to(currentRoomId).emit('final_transcript', data);
     });
 
     // ── WebRTC 信令 ────────────────────────────────────────

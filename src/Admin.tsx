@@ -162,10 +162,10 @@ export default function Admin() {
               {/* 統計卡片 */}
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: '劇本場次', value: u.scripts.length, icon: BookOpen, color: 'indigo' },
-                  { label: '問卷填寫', value: u.surveys.length, icon: ClipboardList, color: 'emerald' },
-                  { label: '評估報告', value: u.reports.length, icon: FileText, color: 'amber' },
-                ].map(({ label, value, icon: Icon, color }) => (
+                  { label: '劇本場次', value: u.scripts.length, iconName: BookOpen, color: 'indigo' },
+                  { label: '問卷填寫', value: u.surveys.length, iconName: ClipboardList, color: 'emerald' },
+                  { label: '評估報告', value: u.reports.length, iconName: FileText, color: 'amber' },
+                ].map(({ label, value, iconName: Icon, color }) => (
                   <div key={label} className={`bg-${color}-950/40 border border-${color}-900/50 rounded-xl p-4 text-center`}>
                     <Icon size={20} className={`text-${color}-400 mx-auto mb-2`} />
                     <div className={`text-2xl font-black text-${color}-400`}>{value}</div>
@@ -412,10 +412,10 @@ export default function Admin() {
                   </div>
                   <div className="flex gap-3 mt-4 pt-4 border-t border-slate-800">
                     {[
-                      { icon: BookOpen, count: u.scripts.length, label: '劇本' },
-                      { icon: ClipboardList, count: u.surveys.length, label: '問卷' },
-                      { icon: FileText, count: u.reports.length, label: '報告' },
-                    ].map(({ icon: Icon, count, label }) => (
+                      { iconName: BookOpen, count: u.scripts.length, label: '劇本' },
+                      { iconName: ClipboardList, count: u.surveys.length, label: '問卷' },
+                      { iconName: FileText, count: u.reports.length, label: '報告' },
+                    ].map(({ iconName: Icon, count, label }) => (
                       <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
                         <Icon size={11} />
                         <span>{count} {label}</span>

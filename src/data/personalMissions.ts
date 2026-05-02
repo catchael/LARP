@@ -48,7 +48,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '簡訊截圖（假的）',
           brief: '偽造的對話訊息',
           details: '只是一張你用電腦合成的對話，有著崔製作人請你搬器材的訊息。',
-          icon: Smartphone,
+          iconName: Smartphone,
           ...OFFMAP,
         },
         {
@@ -56,7 +56,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一包某牌的廉價紙菸',
           brief: '你最習慣抽的菸',
           details: '某牌的廉價紙菸，是你最習慣抽的牌子。',
-          icon: Cigarette,
+          iconName: Cigarette,
           ...OFFMAP,
         },
         {
@@ -64,7 +64,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '打火機',
           brief: '已經有些破碎的塑膠打火機',
           details: '塑膠打火機，已經有些破碎。',
-          icon: Flame,
+          iconName: Flame,
           ...OFFMAP,
         },
         {
@@ -72,7 +72,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '警衛室鑰匙',
           brief: '電視台警衛室的鑰匙',
           details: '電視台警衛室的鑰匙。',
-          icon: Key,
+          iconName: Key,
           ...OFFMAP,
         },
         {
@@ -80,7 +80,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '拍攝道具',
           brief: '偽裝成攝製組的道具',
           details: '為了偽裝你是來拍攝的，所以你帶了一些拍攝道具。',
-          icon: Camera,
+          iconName: Camera,
           ...OFFMAP,
         },
       ],
@@ -101,7 +101,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一把沉重的鐵撬',
           brief: '生鏽到快要斷掉的鐵撬',
           details: '已經生鏽到快要斷掉。',
-          icon: Hammer,
+          iconName: Hammer,
           ...OFFMAP,
         },
         {
@@ -109,7 +109,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一綑粗糙的尼龍繩',
           brief: '綁廢棄物用的尼龍繩',
           details: '綁廢棄物用。',
-          icon: Cable,
+          iconName: Cable,
           ...OFFMAP,
         },
         {
@@ -117,7 +117,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '木製菸斗與菸草',
           brief: '破舊的木製菸斗',
           details: '破舊的木製菸斗與半袋劣質菸草。',
-          icon: Cigarette,
+          iconName: Cigarette,
           ...OFFMAP,
         },
         {
@@ -125,7 +125,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一張報紙',
           brief: '被飛鏢射得千瘡百孔的舊報紙',
           details: '被飛鏢射得千瘡百孔的報紙，上面是崔製作人的照片。',
-          icon: Newspaper,
+          iconName: Newspaper,
           ...OFFMAP,
         },
       ],
@@ -145,7 +145,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '簡訊截圖',
           brief: '崔製作人傳來的訊息',
           details: '崔製作人要你今晚帶著那份「實體檢體」來新亭洞的地下室，並且要你提前將 DNA 檢測報告的副本轉交給他。',
-          icon: Smartphone,
+          iconName: Smartphone,
           ...OFFMAP,
         },
         {
@@ -153,7 +153,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '實驗檢體',
           brief: '嫌犯的過期檢體',
           details: '嫌犯的過期檢體，是你私下從證物庫裡偷出來的。',
-          icon: FlaskConical,
+          iconName: FlaskConical,
           ...OFFMAP,
         },
         {
@@ -161,7 +161,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '檢體報告',
           brief: '醫院出具的 DNA 檢體報告',
           details: '醫院那邊拿到的檢體報告。',
-          icon: FileText,
+          iconName: FileText,
           ...OFFMAP,
         },
         {
@@ -169,7 +169,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一把槍跟手銬',
           brief: '警察必需品',
           details: '一把槍跟手銬，警察必需品。',
-          icon: Crosshair,
+          iconName: Crosshair,
           ...OFFMAP,
         },
       ],
@@ -191,7 +191,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           brief: '崔製作人傳給你的關鍵訊息',
           details:
             '崔製作人傳給你的訊息：「我找到十年前那個連環殺手了，也拿到了致命證據。今晚 11 點，你帶著隱藏式攝影機過來，守在暗處錄下的驗證證據的畫面。」',
-          icon: Smartphone,
+          iconName: Smartphone,
           ...OFFMAP,
         },
         {
@@ -199,7 +199,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '折疊獵刀',
           brief: '擦得雪亮的折疊獵刀',
           details: '鋒利的折疊獵刀，被你擦得雪亮。',
-          icon: Sword,
+          iconName: Sword,
           ...OFFMAP,
         },
         {
@@ -207,7 +207,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '攝影機',
           brief: '微型隱藏式攝影機',
           details: '微型隱藏式攝影機，崔製作人交待要你錄下今晚的對話。',
-          icon: Video,
+          iconName: Video,
           ...OFFMAP,
         },
         {
@@ -215,7 +215,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '筆記本',
           brief: '寫滿十年調查心血',
           details: '寫滿你十年來追查連環殺人魔的調查心血。',
-          icon: Notebook,
+          iconName: Notebook,
           ...OFFMAP,
         },
       ],
@@ -239,7 +239,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '西西',
           brief: '偽造的對話訊息',
           details: '只是一張你用電腦合成的對話，有著崔製作人請你搬器材的訊息。',
-          icon: Smartphone,
+          iconName: Smartphone,
           ...OFFMAP,
         },
         {
@@ -247,7 +247,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: 'abc',
           brief: '你最習慣抽的菸',
           details: '某牌的廉價紙菸，是你最習慣抽的牌子。',
-          icon: Cigarette,
+          iconName: Cigarette,
           ...OFFMAP,
         },
         {
@@ -255,7 +255,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '打火機',
           brief: '已經有些破碎的塑膠打火機',
           details: '塑膠打火機，已經有些破碎。',
-          icon: Flame,
+          iconName: Flame,
           ...OFFMAP,
         },
         {
@@ -263,7 +263,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '警衛室鑰匙',
           brief: '電視台警衛室的鑰匙',
           details: '電視台警衛室的鑰匙。',
-          icon: Key,
+          iconName: Key,
           ...OFFMAP,
         },
         {
@@ -271,7 +271,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '拍攝道具',
           brief: '偽裝成攝製組的道具',
           details: '為了偽裝你是來拍攝的，所以你帶了一些拍攝道具。',
-          icon: Camera,
+          iconName: Camera,
           ...OFFMAP,
         },
       ],
@@ -292,7 +292,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '什麼',
           brief: '生鏽到快要斷掉的鐵撬',
           details: '已經生鏽到快要斷掉。',
-          icon: Hammer,
+          iconName: Hammer,
           ...OFFMAP,
         },
         {
@@ -300,7 +300,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一綑粗糙的尼龍繩',
           brief: '綁廢棄物用的尼龍繩',
           details: '綁廢棄物用。',
-          icon: Cable,
+          iconName: Cable,
           ...OFFMAP,
         },
         {
@@ -308,7 +308,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '木製菸斗與菸草',
           brief: '破舊的木製菸斗',
           details: '破舊的木製菸斗與半袋劣質菸草。',
-          icon: Cigarette,
+          iconName: Cigarette,
           ...OFFMAP,
         },
         {
@@ -316,7 +316,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一張報紙',
           brief: '被飛鏢射得千瘡百孔的舊報紙',
           details: '被飛鏢射得千瘡百孔的報紙，上面是崔製作人的照片。',
-          icon: Newspaper,
+          iconName: Newspaper,
           ...OFFMAP,
         },
       ],
@@ -336,7 +336,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '挖喔',
           brief: '崔製作人傳來的訊息',
           details: '崔製作人要你今晚帶著那份「實體檢體」來新亭洞的地下室，並且要你提前將 DNA 檢測報告的副本轉交給他。',
-          icon: Smartphone,
+          iconName: Smartphone,
           ...OFFMAP,
         },
         {
@@ -344,7 +344,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '實驗檢體',
           brief: '嫌犯的過期檢體',
           details: '嫌犯的過期檢體，是你私下從證物庫裡偷出來的。',
-          icon: FlaskConical,
+          iconName: FlaskConical,
           ...OFFMAP,
         },
         {
@@ -352,7 +352,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '檢體報告',
           brief: '醫院出具的 DNA 檢體報告',
           details: '醫院那邊拿到的檢體報告。',
-          icon: FileText,
+          iconName: FileText,
           ...OFFMAP,
         },
         {
@@ -360,7 +360,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '一把槍跟手銬',
           brief: '警察必需品',
           details: '一把槍跟手銬，警察必需品。',
-          icon: Crosshair,
+          iconName: Crosshair,
           ...OFFMAP,
         },
       ],
@@ -382,7 +382,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           brief: '崔製作人傳給你的關鍵訊息',
           details:
             '崔製作人傳給你的訊息：「我找到十年前那個連環殺手了，也拿到了致命證據。今晚 11 點，你帶著隱藏式攝影機過來，守在暗處錄下的驗證證據的畫面。」',
-          icon: Smartphone,
+          iconName: Smartphone,
           ...OFFMAP,
         },
         {
@@ -390,7 +390,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '折疊獵刀',
           brief: '擦得雪亮的折疊獵刀',
           details: '鋒利的折疊獵刀，被你擦得雪亮。',
-          icon: Sword,
+          iconName: Sword,
           ...OFFMAP,
         },
         {
@@ -398,7 +398,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '攝影機',
           brief: '微型隱藏式攝影機',
           details: '微型隱藏式攝影機，崔製作人交待要你錄下今晚的對話。',
-          icon: Video,
+          iconName: Video,
           ...OFFMAP,
         },
         {
@@ -406,7 +406,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
           name: '筆記本',
           brief: '寫滿十年調查心血',
           details: '寫滿你十年來追查連環殺人魔的調查心血。',
-          icon: Notebook,
+          iconName: Notebook,
           ...OFFMAP,
         },
       ],

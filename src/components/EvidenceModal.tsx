@@ -36,7 +36,7 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
   const isViewing = !!viewingEvidence;
 
   if (!item) return null;
-  const Icon = item.icon;
+  const Icon = item.iconName;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">

@@ -4,6 +4,27 @@ import {
   BookOpen, MapPin, FileText, Search, ClipboardList, Clock, Users, Plus, Trash2, X,
   CircleDot, Mic2, AlertTriangle, Tag, ChevronLeft, GripHorizontal, Pin, PinOff, Package
 } from 'lucide-react';
+import {
+  Mic,
+  Newspaper,
+  Lock,
+  Footprints,
+  Skull,
+  Cigarette,
+  Droplets,
+  Laptop,
+  Cable,
+  Wrench,
+  GlassWater,
+  Umbrella,
+  Smartphone,
+  Crosshair,
+  Shirt,
+  Bandage,
+  Camera,
+  Waves,
+  Mountain,
+} from 'lucide-react'; // 地圖證物
 import { RoomState, RoomUser, User, AppPhase, cn } from '../types';
 import { SCRIPTS } from '../data/scripts';
 import { SpeechHelperPanel } from '../components/SpeechHelperPanel';
@@ -17,6 +38,66 @@ import {
 import { CHARACTER_PROFILES } from '../data/profileContent';
 import { PERSONAL_MISSIONS } from '../data/personalMissions';
 import { DIARY_CONTENT } from '../data/diaryContent';
+
+const EVIDENCE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  search: Search,
+  package: Package,
+  bookOpen: BookOpen,
+  fileText: FileText,
+  mapPin: MapPin,
+  tag: Tag,
+  // 把你 evidence 資料會用到的 icon 都列上
+  cs_mic: Mic,
+  cs_old_news: Newspaper,
+  cs_secret_compartment: Lock,
+  es_locked_door: Lock,
+  cs_drag_marks: Footprints,
+  cs_shoeprint: Footprints,
+  es_muddy_steps: Footprints,
+  pv_footprints: Footprints,
+  ls_slip_marks: Footprints,
+  cs_autopsy: Skull,
+  pv_autopsy: Skull,
+  dp_cigarette_butt: Cigarette,
+  cv_cigarettes: Cigarette,
+  sk_wet_sink: Droplets,
+  ws_sink_clean: Droplets,
+  cg_sink: Droplets,
+  lk_laptop: Laptop,
+  lk_rope: Cable,
+  pv_rope: Cable,
+  es_plastic_part: Package,
+  lk_plastic_bags: Package,
+  bp_backpack: Package,
+  np_disposal_list: FileText,
+  np_old_proposal: FileText,
+  bp_business_card: FileText,
+  ws_pi_card: FileText,
+  cg_metal_debris: Wrench,
+  dp_water_bottle: GlassWater,
+  pv_black_umbrella: Umbrella,
+  ws_big_umbrella: Umbrella,
+  ws_metal_umbrella: Umbrella,
+  bp_phone: Smartphone,
+  bp_gun: Crosshair,
+  bp_lawbooks: BookOpen,
+  ws_fabric: Shirt,
+  cg_medical: Bandage,
+  cg_cctv: Camera,
+  bp_swimwear: Waves,
+  ls_sand_compare: Mountain,
+};
+
+function resolveEvidenceIcon(evidence: any) {
+  // 如果 evidence.iconName 本來就是函式（同一個 session、沒走過序列化），直接用
+  if (typeof evidence?.iconName === 'function') return evidence.iconName;
+  // 如果有字串名稱（推薦的長期解法），查表
+  if (typeof evidence?.iconName === 'string' && EVIDENCE_ICON_MAP[evidence.iconName]) {
+    return EVIDENCE_ICON_MAP[evidence.iconName];
+  }
+  // 兜底
+  return Search;
+}
 
 export interface CharacterNote {
   id: string;
@@ -273,11 +354,11 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
           {/* Top: Function Buttons */}
           <div className="p-4 space-y-2 border-b border-slate-700 w-full flex flex-col items-center">
             {[
-              { id: 'notebook', icon: BookOpen, label: '筆記本' },
-              { id: 'map', icon: MapPin, label: '地圖' },
-              { id: 'script', icon: FileText, label: '文本' },
-              { id: 'clues', icon: Search, label: '線索' },
-              { id: 'tasks', icon: ClipboardList, label: '任務' },
+              { id: 'notebook', iconName: BookOpen, label: '筆記本' },
+              { id: 'map', iconName: MapPin, label: '地圖' },
+              { id: 'script', iconName: FileText, label: '文本' },
+              { id: 'clues', iconName: Search, label: '線索' },
+              { id: 'tasks', iconName: ClipboardList, label: '任務' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -288,7 +369,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                   meetingTab === tab.id ? "bg-indigo-600 text-white" : "hover:bg-slate-700 text-slate-300"
                 )}
               >
-                <tab.icon size={20} className="shrink-0" />
+                <tab.iconName size={20} className="shrink-0" />
                 {!isHelperPanelOpen && <span className="font-medium whitespace-nowrap">{tab.label}</span>}
                 
                 {/* 折疊時的懸浮提示 (Tooltip) */}
@@ -1071,7 +1152,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                     {backpack.length > 0 ? (
                       <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
                         {backpack.map((evidence: any, idx) => {
-                          const Icon = evidence.icon || Search;
+                          const Icon = resolveEvidenceIcon(evidence);
                           const isSelected = selectedEvidence?.id === evidence.id;
                           return (
                             <motion.div
@@ -1124,7 +1205,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                       <div className="p-6 overflow-y-auto h-full [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                         <div className="flex items-start gap-4 mb-6 pb-5 border-b border-slate-700">
                            <div className="p-3.5 bg-indigo-500/20 rounded-2xl text-indigo-400 shrink-0">
-                              {selectedEvidence.icon ? React.createElement(selectedEvidence.icon as any, { size: 28 }) : <Search size={28} />}
+                              {selectedEvidence.iconName ? React.createElement(selectedEvidence.iconName as any, { size: 28 }) : <Search size={28} />}
                            </div>
                            <div>
                              <h3 className="text-xl font-bold text-white mb-2">{selectedEvidence.name}</h3>

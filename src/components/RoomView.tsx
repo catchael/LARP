@@ -47,7 +47,7 @@ export const RoomView: React.FC<RoomViewProps> = ({
         const isCollected = allCollectedEvidence.some(e => e.id === evidence.id);
         if (isCollected) return null; // Hide collected evidence from map
 
-        const Icon = evidence.icon;
+        const Icon = evidence.iconName;
         return (
           <motion.div
             key={evidence.id}

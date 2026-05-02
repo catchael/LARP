@@ -17,7 +17,7 @@ export interface Framework {
 export interface FrameworkCategory {
   id: string;
   title: string;
-  icon: LucideIcon;
+  iconName: LucideIcon;
   color: string;
   bgColor: string;
   borderColor: string;
@@ -28,7 +28,7 @@ export const FRAMEWORK_CATEGORIES: FrameworkCategory[] = [
   {
     id: 'accuse',
     title: '我要指控真兇 / 丟出鐵證',
-    icon: Target,
+    iconName: Target,
     color: 'text-red-400',
     bgColor: 'bg-red-400/10',
     borderColor: 'border-red-400/30',
@@ -58,7 +58,7 @@ export const FRAMEWORK_CATEGORIES: FrameworkCategory[] = [
   {
     id: 'defend',
     title: '我被懷疑了 / 自我辯護',
-    icon: Shield,
+    iconName: Shield,
     color: 'text-emerald-400',
     bgColor: 'bg-emerald-400/10',
     borderColor: 'border-emerald-400/30',
@@ -88,7 +88,7 @@ export const FRAMEWORK_CATEGORIES: FrameworkCategory[] = [
   {
     id: 'trade',
     title: '我想私聊交易 / 拉攏盟友',
-    icon: Handshake,
+    iconName: Handshake,
     color: 'text-amber-400',
     bgColor: 'bg-amber-400/10',
     borderColor: 'border-amber-400/30',
@@ -118,7 +118,7 @@ export const FRAMEWORK_CATEGORIES: FrameworkCategory[] = [
   {
     id: 'interrogate',
     title: '我要盤問細節 / 抓出謊言',
-    icon: Search,
+    iconName: Search,
     color: 'text-purple-400',
     bgColor: 'bg-purple-400/10',
     borderColor: 'border-purple-400/30',
@@ -138,7 +138,7 @@ export const FRAMEWORK_CATEGORIES: FrameworkCategory[] = [
   {
     id: 'persuade',
     title: '我要說服別人 / 安撫情緒',
-    icon: Users,
+    iconName: Users,
     color: 'text-blue-400',
     bgColor: 'bg-blue-400/10',
     borderColor: 'border-blue-400/30',

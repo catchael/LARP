@@ -53,7 +53,7 @@ export const Backpack: React.FC<BackpackProps> = ({
                 {item ? (
                   <div className="flex items-center gap-4 w-full">
                     <div className="w-12 h-12 rounded bg-slate-700 flex items-center justify-center shrink-0">
-                      <item.icon size={24} className="text-slate-300" />
+                      <item.iconName size={24} className="text-slate-300" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-slate-200 truncate">{item.name}</div>

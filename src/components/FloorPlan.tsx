@@ -27,7 +27,7 @@ interface Zone {
   id: string;
   name: string;
   subtitle: string;
-  icon: React.ElementType;
+  iconName: React.ElementType;
   x: number; y: number; w: number; h: number;
   accent: string;
 }
@@ -38,12 +38,12 @@ const ZONES_BY_SCRIPT: Record<number, Zone[]> = {
   // 劇本 1 — 廢棄商業大樓地下室
   // ═══════════════════════════════════════════════════════════
   1: [
-    { id: 'entrance_stairs', name: '入口樓梯與鐵門',     subtitle: '密室證明',         icon: DoorOpen, x: 50, y: 10, w: 28, h: 16, accent: 'slate'  },
-    { id: 'newspapers',      name: '散落的紙箱與舊報紙', subtitle: '隱藏文件',         icon: FileText, x: 18, y: 40, w: 24, h: 20, accent: 'amber'  },
-    { id: 'crime_scene',     name: '地下室正中央',       subtitle: '案發現場',         icon: Skull,    x: 50, y: 44, w: 28, h: 26, accent: 'red'    },
-    { id: 'lockers',         name: '破舊的員工置物櫃',   subtitle: '真兇的臨時基地',   icon: Archive,  x: 82, y: 40, w: 24, h: 20, accent: 'indigo' },
-    { id: 'debris_pile',     name: '陰暗的廢棄物堆',     subtitle: '完美栽贓點',       icon: Trash2,   x: 22, y: 80, w: 26, h: 18, accent: 'purple' },
-    { id: 'cleaning_sink',   name: '廢棄的清潔水槽',     subtitle: '異樣的水跡',       icon: Droplets, x: 78, y: 80, w: 26, h: 18, accent: 'cyan'   },
+    { id: 'entrance_stairs', name: '入口樓梯與鐵門',     subtitle: '密室證明',         iconName: DoorOpen, x: 50, y: 10, w: 28, h: 16, accent: 'slate'  },
+    { id: 'newspapers',      name: '散落的紙箱與舊報紙', subtitle: '隱藏文件',         iconName: FileText, x: 18, y: 40, w: 24, h: 20, accent: 'amber'  },
+    { id: 'crime_scene',     name: '地下室正中央',       subtitle: '案發現場',         iconName: Skull,    x: 50, y: 44, w: 28, h: 26, accent: 'red'    },
+    { id: 'lockers',         name: '破舊的員工置物櫃',   subtitle: '真兇的臨時基地',   iconName: Archive,  x: 82, y: 40, w: 24, h: 20, accent: 'indigo' },
+    { id: 'debris_pile',     name: '陰暗的廢棄物堆',     subtitle: '完美栽贓點',       iconName: Trash2,   x: 22, y: 80, w: 26, h: 18, accent: 'purple' },
+    { id: 'cleaning_sink',   name: '廢棄的清潔水槽',     subtitle: '異樣的水跡',       iconName: Droplets, x: 78, y: 80, w: 26, h: 18, accent: 'cyan'   },
   ],
   // ═══════════════════════════════════════════════════════════
   // 劇本 2 — 生態郊野公園及周圍社區
@@ -52,14 +52,14 @@ const ZONES_BY_SCRIPT: Record<number, Zone[]> = {
   // ═══════════════════════════════════════════════════════════
   2: [
     // ── 公園深處（最頂端 = 案發現場 + 周遭草叢）──
-    { id: 'pavilion',        name: '廢棄涼亭',             subtitle: '案發現場',         icon: Skull,         x: 50, y: 12, w: 30, h: 18, accent: 'red'    },
-    { id: 'bushes_pit',      name: '涼亭周遭草叢與深坑',   subtitle: '凶器與棄置物',     icon: TreeDeciduous, x: 22, y: 32, w: 26, h: 20, accent: 'purple' },
+    { id: 'pavilion',        name: '廢棄涼亭',             subtitle: '案發現場',         iconName: Skull,         x: 50, y: 12, w: 30, h: 18, accent: 'red'    },
+    { id: 'bushes_pit',      name: '涼亭周遭草叢與深坑',   subtitle: '凶器與棄置物',     iconName: TreeDeciduous, x: 22, y: 32, w: 26, h: 20, accent: 'purple' },
     // ── 公園淺處（步道、洗手台、泥沙區）──
-    { id: 'walkway_sink',    name: '公園步道與公共洗手台', subtitle: '清洗痕跡',         icon: Droplets,      x: 78, y: 36, w: 26, h: 20, accent: 'cyan'   },
-    { id: 'landscape_sand',  name: '景觀工程泥沙區',       subtitle: '腳印與土質比對',   icon: Mountain,      x: 50, y: 55, w: 26, h: 16, accent: 'amber'  },
+    { id: 'walkway_sink',    name: '公園步道與公共洗手台', subtitle: '清洗痕跡',         iconName: Droplets,      x: 78, y: 36, w: 26, h: 20, accent: 'cyan'   },
+    { id: 'landscape_sand',  name: '景觀工程泥沙區',       subtitle: '腳印與土質比對',   iconName: Mountain,      x: 50, y: 55, w: 26, h: 16, accent: 'amber'  },
     // ── 社區與外圍（最底端，距公園步行 10 分鐘）──
-    { id: 'community_guard', name: '社區大門與警衛室',     subtitle: '監視器與急救痕跡', icon: DoorOpen,      x: 22, y: 80, w: 26, h: 18, accent: 'slate'  },
-    { id: 'convenience',     name: '便利商店與外圍街道',   subtitle: '避雨者的菸蒂',     icon: ShoppingBag,   x: 78, y: 80, w: 26, h: 18, accent: 'indigo' },
+    { id: 'community_guard', name: '社區大門與警衛室',     subtitle: '監視器與急救痕跡', iconName: DoorOpen,      x: 22, y: 80, w: 26, h: 18, accent: 'slate'  },
+    { id: 'convenience',     name: '便利商店與外圍街道',   subtitle: '避雨者的菸蒂',     iconName: ShoppingBag,   x: 78, y: 80, w: 26, h: 18, accent: 'indigo' },
   ],
 };
 
@@ -140,7 +140,7 @@ export const FloorPlan: React.FC<FloorPlanProps> = ({
           {/* 動態渲染區域 */}
           {zones.map((zone, i) => {
             const accent = accentMap[zone.accent];
-            const Icon = zone.icon;
+            const Icon = zone.iconName;
             const clickable = phase === 'game_search';
 
             return (

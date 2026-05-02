@@ -25,8 +25,8 @@ if (typeof window !== 'undefined') {
 // ─── VAD 預載 ────────────────────────────────────────────────────────────────
 // 在 module 載入時立即於背景靜默預取 VAD 腳本（~50KB）和模型（~4MB）
 // 使用者點麥克風時就能直接使用，不用等待網路請求
-const VAD_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/bundle.min.js";
-const VAD_MODEL_URL  = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/silero_vad.onnx";
+const VAD_SCRIPT_URL  = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.24/dist/bundle.min.js";
+const VAD_MODEL_URL   = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.24/dist/silero_vad.onnx";
 
 function preloadVAD(): Promise<void> {
   if (window.__vadPreloadPromise) return window.__vadPreloadPromise;
@@ -522,7 +522,7 @@ export const LivePauseDemo = React.forwardRef<LivePauseDemoHandle, LivePauseDemo
 
           const vadInstance = await MicVAD.new({
             model: modelBuffer,
-            workletURL: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/vad.worklet.bundle.min.js",
+            workletURL: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.24/dist/vad.worklet.bundle.min.js",
             onSpeechStart: () => {
               setIsSpeaking(true);
               const now = Date.now();

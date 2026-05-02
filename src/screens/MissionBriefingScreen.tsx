@@ -133,7 +133,7 @@ export const MissionBriefingScreen: React.FC<MissionBriefingScreenProps> = ({
         {mission.initialClues.length > 0 ? (
           <div className="space-y-3">
             {mission.initialClues.map(clue => {
-              const ClueIcon = clue.icon;
+              const ClueIcon = clue.iconName;
               return (
                 <div
                   key={clue.id}

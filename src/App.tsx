@@ -127,7 +127,16 @@ export default function App() {
     try {
       const parsed = JSON.parse(savedUser);
       setUser(parsed);
-      // 直接 inline fetch，不依賴還沒定義的 fetchSurveys/fetchRecords
+
+      // 🌟 新增：如果有未結束的房間紀錄，先離開 'login' phase，
+      //         避免 rejoin_room 還沒回來前畫面卡在登入畫面。
+      const savedRoomId = localStorage.getItem(`larp_active_room_${parsed.email}`);
+      if (savedRoomId) {
+        setPhase('lobby'); // 占位用，等 room_state 回來會被覆蓋成正確 phase
+      } else {
+        setPhase('lobby'); // 已登入過的人直接進大廳，不用看登入畫面
+      }
+
       fetch(`/api/surveys/${parsed.id}`)
         .then(r => r.json())
         .then(data => setSurveys(data.surveys || []));
@@ -209,11 +218,8 @@ export default function App() {
   const recognitionRef = useRef<any>(null);
   const recognitionActiveRef = useRef(false);
   const isMicRequestingRef = useRef(false); // ✅ 防止重複請求麥克風
-  const lastSubtitleSetAt = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<BlobPart[]>([]);
   const roomStateRef = useRef<RoomState | null>(null);
-  const hasSavedDialogueRef = useRef(false);
   useEffect(() => { roomStateRef.current = roomState; }, [roomState]);
 
   // 🌟 累積這局所有發言
@@ -225,19 +231,38 @@ export default function App() {
   useEffect(() => {
     if (isMicOn && localStreamRef.current && phase === 'game_meeting') {
       const stream = localStreamRef.current;
-      const mediaRecorder = new MediaRecorder(stream);
+
+      // 🌟 嘗試用 Opus 編碼，比預設品質好
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm';
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+
+      // 🌟 關鍵修正：每段錄音用「自己的」chunks 陣列（closure 捕獲），
+      //    不再共用 audioChunksRef，避免被下一次錄音清掉
+      const localChunks: BlobPart[] = [];
+
+      // 🌟 在錄音開始那瞬間就鎖定回合
+      const lockedRound = currentRoundRef.current;
 
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (e.data.size > 0) localChunks.push(e.data);
       };
 
       mediaRecorder.onstop = async () => {
-        if (audioChunksRef.current.length === 0) return;
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
-        // ✅ 從 ref 讀取最新狀態，避免 stale closure
+        console.log(`[錄音] stop 觸發，chunks=${localChunks.length}, 總 byte=${
+          localChunks.reduce((s, c: any) => s + (c.size || 0), 0)
+        }`);
+
+        if (localChunks.length === 0) {
+          console.warn('[錄音] 沒有收到任何 chunk，可能是太短或瀏覽器問題');
+          return;
+        }
+        const audioBlob = new Blob(localChunks, { type: mimeType });
+
         const currentRoom = roomStateRef.current;
         const myUser = currentRoom?.users.find(u => u.email === user?.email);
         const myCharName = myUser?.assignedCharacter || user?.email || '';
@@ -254,20 +279,31 @@ export default function App() {
             method: 'POST',
             body: formData
           });
-          // ✅ 讀取回應並記錄到 dialogue
           const data = await res.json();
+          console.log(`[STT] 收到回傳：${data.text?.length || 0} 字`);
           if (data.success && data.text) {
             setSubtitles(prev => [...prev, data.text]);
             dialogueRef.current.push({ speaker: myCharName, text: data.text });
-            appendToTranscript(data.text); // 👈 補這行，確保路徑 B 也有資料
+            appendToTranscript(data.text, lockedRound, true);
+
+            // 🌟 廣播自己的最終 ASR 給房間其他人
+            socket?.emit('final_transcript', { 
+              line: data.text, 
+              round: lockedRound 
+            });
           }
         } catch (e) {
-          console.error("發言上傳失敗", e);
+          console.error("[STT] 上傳失敗", e);
         }
       };
 
-      mediaRecorder.start();
+      // 🌟 加 timeslice 1000ms：每秒 flush 一次 chunk，
+      //    就算瀏覽器或 stream 突然中斷，也不會把整段語音弄丟
+      mediaRecorder.start(1000);
+      console.log(`[錄音] 開始（mimeType=${mimeType}, round=${lockedRound}）`);
+
     } else if (!isMicOn && mediaRecorderRef.current?.state === 'recording') {
+      console.log('[錄音] 偵測到 isMicOn=false，呼叫 stop()');
       mediaRecorderRef.current.stop();
     }
   }, [isMicOn, phase, user?.id]);
@@ -540,6 +576,19 @@ export default function App() {
         localStorage.setItem(`larp_active_room_${user.email}`, state.id);
       }
 
+      // 🌟 新增：重連後 meetingUsers 的 socket id 會變動，
+      //         把對不到新清單的舊 peer 全部關掉，避免殘留爆音 / 殭屍連線
+      if (state.meetingUsers) {
+        const currentIds = state.meetingUsers.map((u: any) => u.id);
+        Object.keys(peerConnections.current).forEach(id => {
+          if (!currentIds.includes(id)) {
+            peerConnections.current[id].close();
+            delete peerConnections.current[id];
+            document.getElementById(`audio-${id}`)?.remove();
+          }
+        });
+      }
+
       if (state.timelineNodes && state.timelineNodes.length > 0) {
         setTimelineNodes(state.timelineNodes);
         setTimelineEvents(state.timelineEvents || {});
@@ -673,15 +722,17 @@ export default function App() {
 
     // room_error
     newSocket.on('room_error', (msg: string) => {
-      alert(`發生錯誤：${msg}`);
+      const isFatal = msg.includes('不存在') || msg.includes('解散') || msg.includes('不在房間內');
 
-      // 只有當錯誤是「房間不存在」或「已解散」時才清理狀態
-      if (msg.includes('不存在') || msg.includes('解散') || msg.includes('不在房間內')) {
+      if (isFatal) {
         if (user?.email) {
           localStorage.removeItem(`larp_active_room_${user.email}`);
         }
-        resetRoomState(); // 只有確定回不去了才重置
+        resetRoomState();
         setPhase('lobby');
+        setTimeout(() => alert(`發生錯誤：${msg}`), 0);
+      } else {
+        alert(`發生錯誤：${msg}`);
       }
     });
 
@@ -732,9 +783,11 @@ export default function App() {
     });
 
     newSocket.on('room_disbanded', (msg: string) => {
-      alert(msg);
+      // 🌟 先把畫面切回大廳，再彈提示，避免 alert 期間背景一片黑看起來像當機
       resetRoomState();
-      setPhase('lobby'); // 踢回大廳
+      setPhase('lobby');
+      // 用 setTimeout 讓 React 先 commit 一次 render
+      setTimeout(() => alert(msg), 0);
     });
 
     // WebRTC Signaling Listeners (Main)
@@ -956,8 +1009,6 @@ export default function App() {
             }
             return newArr.slice(-50);
           });
-          // 🌟 新增：同步寫入跨輪次 transcript
-          appendToTranscript(data.subtitle);
         }
       };
 
@@ -966,11 +1017,18 @@ export default function App() {
       socket.on('warning_cancelled', onWarningCancelled);
       socket.on('speaking_data', onSpeakingData);
 
+      const onFinalTranscript = (data: { line: string; round: number }) => {
+        console.log(`[final_transcript] 收到：${data.line.slice(0, 30)}... (round=${data.round})`);
+        appendToTranscript(data.line, data.round, true);   // 🌟 isFinal=true
+      };
+      socket.on('final_transcript', onFinalTranscript);
+
       return () => {
         socket.off('meeting_state', onMeetingStateMeeting);
         socket.off('silence_warning', onSilenceWarning);
         socket.off('warning_cancelled', onWarningCancelled);
         socket.off('speaking_data', onSpeakingData);
+        socket.off('final_transcript', onFinalTranscript);
       };
     }
   }, [phase, socket, user]);
@@ -978,28 +1036,35 @@ export default function App() {
   // 🌟 語音相關階段：角色預覽、個人檔案、搜證、搜證結束、會議室都可以開麥通話
   const isVoicePhase = ['character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed'].includes(phase);
 
-  // 🌟 新增：追加到跨輪次 transcript（修正過度覆蓋的 Bug）
-  const appendToTranscript = (line: string) => {
+  //    isFinal=false（預設）是即時字幕，同人同回合會覆蓋更新
+  const appendToTranscript = (line: string, forcedRound?: number, isFinal: boolean = false) => {
+    console.log(`[transcript] +1 line (round=${forcedRound ?? currentRoundRef.current}, isFinal=${isFinal}, ${line.length}字)`);
     setAllRoundsTranscript(prev => {
-      const round = currentRoundRef.current;
+      const round = forcedRound ?? currentRoundRef.current;
       const speakerName = line.split('：')[0];
       const newArr = [...prev];
-      
+
+      // 🌟 ASR 最終結果：永遠新增一筆，絕不覆蓋
+      if (isFinal) {
+        newArr.push({ round, line });
+        return newArr;
+      }
+
+      // 即時字幕路徑：保留原本的覆蓋邏輯
       if (newArr.length > 0) {
         const last = newArr[newArr.length - 1];
-        // 檢查是否為同一人的連續發言
         if (last.round === round && last.line.startsWith(speakerName + '：')) {
-          // 如果新句子長度比上一句短很多，代表是全新的一句話（麥克風 buffer 重置）
           if (line.length < last.line.length - 5) {
             newArr.push({ round, line });
           } else {
-            // 否則視為同一句話的語音辨識即時更新，直接覆蓋
             newArr[newArr.length - 1] = { round, line };
           }
-          return newArr;
+        } else {
+          newArr.push({ round, line });
         }
+      } else {
+        newArr.push({ round, line });
       }
-      newArr.push({ round, line });
       return newArr;
     });
   };
@@ -1039,12 +1104,13 @@ export default function App() {
 
     let stream: MediaStream | null = null;
     navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        sampleRate: 48000,
-      }
+      audio: { 
+        echoCancellation: true,    // 維持，避免回音
+        noiseSuppression: false,   // 🌟 關掉，不要砍掉低音量
+        autoGainControl: true,     // 維持，自動放大
+        channelCount: 1,
+        sampleRate: 16000,
+      } 
     }).then(s => {
       stream = s;
       localStreamRef.current = s;
@@ -1133,18 +1199,6 @@ export default function App() {
           isNewSentence = false; // 新增後立刻設為 false，後續的 interim 就會覆蓋這行
         }
         return newArr.slice(-50);
-      });
-
-      // 🌟 修正後的 transcript 記錄方式
-      setAllRoundsTranscript(prev => {
-        const round = currentRoundRef.current;
-        const newArr = [...prev];
-        if (newArr.length > 0 && !isNewSentence) {
-          newArr[newArr.length - 1] = { round, line: newSubtitle };
-        } else {
-          newArr.push({ round, line: newSubtitle });
-        }
-        return newArr;
       });
 
       // 當這句話被系統判定為「結束（isFinal）」時，將標記設為 true，下次就會換行
@@ -2007,7 +2061,14 @@ export default function App() {
                 const res = await fetch('/api/analyse', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: user.id, scriptName: scriptTitle, turns: myTurns }),
+                  body: JSON.stringify({ 
+                    userId: user.id, 
+                    scriptName: scriptTitle, 
+                    turns: myTurns,
+                    // 🌟 新增：完整對話 + 角色名稱，給 AI 當脈絡
+                    fullDialogue: packagedDialogue, 
+                    targetCharacter: myCharacterName,
+                  }),
                 });
                 const data = await res.json();
                 
