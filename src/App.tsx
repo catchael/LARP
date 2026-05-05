@@ -200,7 +200,7 @@ export default function App() {
 
   // Shop & Coins State
   const [coinCount, setCoinCount] = useState(0);
-  const [backpackCapacity, setBackpackCapacity] = useState(3);
+  const [backpackCapacity, setBackpackCapacity] = useState(4);
   const [unlockedAdvancedDetails, setUnlockedAdvancedDetails] = useState<string[]>([]);
   const [unlockedCharacterAdvanced, setUnlockedCharacterAdvanced] = useState<string[]>([]); 
   const [isShopOpen, setIsShopOpen] = useState(false);
@@ -369,10 +369,11 @@ export default function App() {
     currentRoundRef.current = (roomState as any)?.currentRound ?? 1;
   }, [roomState]);
 
-  // 🌟 每次進入搜查階段時清空當前背包（跨回合累計紀錄保留在 allCollectedEvidence）
+  // 🌟 每次進入搜查階段時清空當前背包與已撿金幣紀錄（讓金幣每輪刷新）
   useEffect(() => {
     if (phase === 'game_search') {
       setBackpack([]);
+      setCollectedCoins([]);  // 🌟 重置已撿金幣，讓金幣每回合重新出現
     }
   }, [phase]);
 

@@ -10,6 +10,7 @@ import {
   ClipboardList,
   FileText,
   History,
+  UserCircle,
   X,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -20,6 +21,7 @@ interface RecordsPanelProps {
   recordsView: 'menu' | 'scripts' | 'surveys' | 'reports';
   setRecordsView: (v: 'menu' | 'scripts' | 'surveys' | 'reports') => void;
   setShowRecordsPanel: (v: boolean) => void;
+  onEditAvatar?: () => void;   // 🌟 重訂暱稱與頭像
   surveys: Survey[];
   selectedSurveyId: number | null;
   setSelectedSurveyId: (id: number | null) => void;
@@ -35,6 +37,7 @@ export const RecordsPanel: React.FC<RecordsPanelProps> = ({
   recordsView,
   setRecordsView,
   setShowRecordsPanel,
+  onEditAvatar,
   surveys,
   selectedSurveyId,
   setSelectedSurveyId,
@@ -105,6 +108,25 @@ export const RecordsPanel: React.FC<RecordsPanelProps> = ({
         </div>
         <ChevronRight className="text-amber-300 group-hover:translate-x-1 transition-transform" />
       </button>
+
+      {/* 🌟 重訂暱稱與頭像 */}
+      {onEditAvatar && (
+        <button
+          onClick={() => { onEditAvatar(); setShowRecordsPanel(false); }}
+          className="w-full p-6 bg-slate-50 hover:bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-between group transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-600 rounded-xl flex items-center justify-center text-white">
+              <UserCircle size={24} />
+            </div>
+            <div className="text-left">
+              <div className="font-bold text-lg text-slate-800">重訂暱稱與頭像</div>
+              <div className="text-sm text-slate-500">更換你的遊戲顯示名稱與大頭貼</div>
+            </div>
+          </div>
+          <ChevronRight className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+        </button>
+      )}
     </div>
   );
 

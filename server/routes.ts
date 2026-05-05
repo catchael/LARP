@@ -7,10 +7,12 @@ import db from "./db.js";
 import { larpEngine } from "./engine.js";
 import multer from "multer";
 import OpenAI from "openai";
+
 import ffmpegPath from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 import { Readable, PassThrough } from "stream";
 import { getScript, ScriptMeta } from "./entity.js";
+import { MODELS } from "./prompts.js";
 
 const SCRIPT_ID_MAP: Record<string, string> = {
   "1": "suffocation",
@@ -147,30 +149,38 @@ router.post("/save-dialogue", async (req, res) => {
 //  ASR：Groq Whisper
 // ─────────────────────────────────────────────────────────
 
-async function transcribeWithGroq(audioBuffer: Buffer, script: ScriptMeta): Promise<string> {
-  const wavBuffer = await webmToWav16k(audioBuffer);
-  const { Blob } = await import("buffer");
-  const audioBlob = new Blob([wavBuffer], { type: "audio/wav" });
-  const audioFile = new File([audioBlob as any], "audio.wav", { type: "audio/wav" });
-
-  const formData = new FormData();
-  formData.append("file", audioFile as any);
-  formData.append("model", "whisper-large-v3-turbo");
-  formData.append("language", "zh");
-  formData.append("response_format", "text");
-  formData.append("prompt", script.glossary.join("、"));
-
-  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-    body: formData,
+async function transcribeWithDeepgram(audioBuffer: Buffer): Promise<string> {
+  const model = MODELS.STT_AUDIO.replace("deepgram/", "");
+  const params = new URLSearchParams({
+    model,
+    language: "zh-TW",
+    smart_format: "true",
+    filler_words: "true",
+    punctuate: "true",
   });
+
+  const response = await fetch(
+    `https://api.deepgram.com/v1/listen?${params.toString()}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
+        "Content-Type": "audio/wav",
+      },
+      body: new Uint8Array(audioBuffer),
+    }
+  );
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Groq STT ${response.status}: ${body.slice(0, 300)}`);
+    throw new Error(`Deepgram STT ${response.status}: ${body.slice(0, 300)}`);
   }
-  return (await response.text()).trim();
+
+  const data = await response.json();
+  const transcript =
+    data?.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
+
+  return transcript.trim();
 }
 
 // ─────────────────────────────────────────────────────────
@@ -232,11 +242,40 @@ router.post("/process-voice-turn", upload.single("audio"), async (req, res) => {
 
     if (!audioBuffer) return res.status(400).json({ error: "沒有接收到音檔" });
 
-    console.log(`[STT] 收到音檔 ${audioBuffer.length} bytes，準備送 Groq Whisper`);
-    const rawText = await transcribeWithGroq(audioBuffer, script);
+    console.log(`[STT] 收到音檔 ${audioBuffer.length} bytes，準備送 Deepgram`);
+    const rawText = await transcribeWithDeepgram(audioBuffer);
     console.log(`[STT] ASR 回傳：「${rawText}」（${rawText.length} 字）`);
 
     if (!rawText.trim()) return res.json({ success: true, text: "" });
+
+    // 🌟 Whisper 幻覺過濾：靜音/噪音時 Whisper 會產生固定的填充文字，直接丟棄
+    const WHISPER_HALLUCINATION = [
+      '字幕', 'amara', '訂閱', '翻譯', 'mbc', 'kbs', 'sbs', 'tvn',
+      '請按讚', '請分享', '敬請期待', '廣告', 'thanks for watching',
+      'subtitle', 'subtitles', 'closed caption',
+    ];
+
+    // 🌟 語言偵測：計算日文（hiragana/katakana）和韓文字元比例
+    //    Whisper 在靜音或環境噪音時常幻覺出假日文/韓文
+    const countChars = (text: string, regex: RegExp) =>
+      (text.match(regex) ?? []).length;
+    const totalChars = rawText.replace(/\s/g, '').length || 1;
+    const japaneseCount = countChars(rawText, /[぀-ゟ゠-ヿ]/g); // hiragana + katakana
+    const koreanCount   = countChars(rawText, /[가-힯ᄀ-ᇿ]/g); // hangul
+    const foreignRatio  = (japaneseCount + koreanCount) / totalChars;
+
+    const rawLower = rawText.toLowerCase();
+    const isHallucination =
+      WHISPER_HALLUCINATION.some(w => rawLower.includes(w)) ||
+      rawText.trim().length < 2 ||
+      /^[\s\S]*$/.test('') ||                             // placeholder
+      /^[，。！？、…\s]+$/.test(rawText.trim()) ||        // 純標點
+      foreignRatio > 0.3;                                 // 超過 30% 是日/韓文字元
+
+    if (isHallucination) {
+      console.warn(`[STT] 偵測到 Whisper 幻覺輸出（日韓比例 ${Math.round(foreignRatio*100)}%），已丟棄：「${rawText}」`);
+      return res.json({ success: true, text: "" });
+    }
 
     let correctedText = rawText;
     try {

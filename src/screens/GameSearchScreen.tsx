@@ -103,7 +103,7 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
           {/* 背包提醒（房間內版） */}
           <div className="flex items-center gap-2 mb-4 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-slate-200 text-xs relative z-20 shrink-0 shadow-lg">
             <Briefcase size={14} className="text-slate-300 shrink-0" />
-            <span className="font-mono">每次搜查僅有 3 格背包空間，請謹慎選擇要帶走哪些線索</span>
+            <span className="font-mono">每次搜查僅有 4 格背包空間，請謹慎選擇要帶走哪些線索</span>
           </div>
 
           <div className="flex-1 relative z-10 font-mono bg-slate-900/80 border border-slate-800/80 rounded-xl p-8 shadow-inner overflow-auto">
@@ -126,7 +126,7 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
             className="absolute bottom-20 left-6 z-30 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/95 backdrop-blur-md border border-slate-500/80 text-slate-100 text-xs shadow-[0_4px_20px_rgba(0,0,0,0.6)] whitespace-nowrap"
           >
             <Briefcase size={13} className="text-slate-300 shrink-0" />
-            <span className="font-mono tracking-wide">每次搜查僅有 3 格背包空間，請謹慎選擇</span>
+            <span className="font-mono tracking-wide">每次搜查僅有 4 格背包空間，請謹慎選擇</span>
           </motion.div>
 
           {/* 平面圖區域：佔滿全畫面，按鈕以 z-index 浮在上層 */}
@@ -245,7 +245,7 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
               
               <div className="p-6 space-y-4 text-slate-300 text-sm leading-relaxed">
                 <ul className="space-y-3 list-disc pl-5">
-                  <li>背包空間僅有 <span className="text-red-400 font-bold">3格</span>，請謹慎使用。</li>
+                  <li>背包空間僅有 <span className="text-red-400 font-bold">4格</span>，請謹慎使用。</li>
                   <li>在「筆記本 - 角色檔案」右側頁面，可解鎖人物特徵。</li>
                   <li>可在商店購買背包空間及證物深層線索。</li>
                   <li>深層線索請在「筆記本 - 背包」中點擊查看。</li>

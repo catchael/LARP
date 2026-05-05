@@ -392,13 +392,7 @@ const ReportDetail = ({ report, scriptName, onBack }: {
                               </div>
                               <p className="text-sm text-slate-700 leading-relaxed">{turn.repaired}</p>
                             </div>
-                            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-                              <div className="flex items-center gap-1.5 mb-2">
-                                <Star size={11} className="text-indigo-600" />
-                                <span className="text-[10px] font-bold text-indigo-600 uppercase">黃金答案</span>
-                              </div>
-                              <p className="text-sm text-slate-700 leading-relaxed">{turn.golden}</p>
-                            </div>
+
                           </div>
                           {jv.one_line && (
                             <div className="bg-white rounded-xl p-4 border border-slate-200">

@@ -150,21 +150,15 @@ export const GameEndingScreen: React.FC<GameEndingScreenProps> = ({
             className="pt-8 relative z-10"
           >
             <button
-              onClick={isHost ? onNextPhase : undefined}
-              disabled={!isHost}
+              onClick={onNextPhase}
               className={cn(
-                "px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all transform",
-                isHost ? "hover:scale-105 cursor-pointer" : "opacity-80 cursor-not-allowed",
+                "px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all transform hover:scale-105 cursor-pointer",
                 isKillerCaught && !isKiller 
                   ? "bg-amber-900 text-amber-50 hover:bg-amber-800 shadow-xl shadow-amber-900/20" 
                   : "bg-white/20 text-white hover:bg-white/30 border border-white/30 backdrop-blur-md"
               )}
             >
-              {isHost ? (
-                <><Search size={24} /> 進入真相大白環節</>
-              ) : (
-                <><Lock size={24} /> 等待房主進入真相環節...</>
-              )}
+              <Search size={24} /> 進入真相大白環節
             </button>
           </motion.div>
         </motion.div>

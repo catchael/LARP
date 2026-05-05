@@ -184,9 +184,10 @@ export const ReadyControl: React.FC<ReadyControlProps> = ({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute -top-12 whitespace-nowrap bg-indigo-600/90 border border-indigo-400 text-white text-xs px-3 py-1.5 rounded-full shadow-lg font-bold z-50 backdrop-blur-sm"
+                  className="absolute -top-16 whitespace-nowrap bg-indigo-600/90 border border-indigo-400 text-white text-xs px-3 py-2 rounded-xl shadow-lg font-bold z-50 backdrop-blur-sm flex flex-col items-center gap-0.5"
                 >
-                  請依提示念出你的台詞~
+                  <span>請依提示念出你的台詞~</span>
+                  <span className="text-indigo-200 font-normal">從這裡發言才會顯示文字喔</span>
                   <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-indigo-600/90 border-b border-r border-indigo-400 rotate-45" />
                 </motion.div>
               )}
@@ -488,26 +489,21 @@ export const ActScreen: React.FC<ActScreenProps> = ({
 
   // ── 🌟 互斥麥克風開關控制 ─────────────────────────────
   const handleToggleGeneralMic = () => {
-    if (isMicOn) {
-      if (isActingMic) setIsActingMic(false); // 切換到一般麥
-      else toggleMic(); // 關閉
-    } else {
-      toggleMic();
-      setIsActingMic(false);
-    }
+    // 演戲模式下一般麥按鈕不干涉，避免干擾 isActingMic 狀態
+    if (isActingMic) return;
+    toggleMic();
   };
 
   const handleToggleActingMic = () => {
     setHasStartedActing(true);
-    if (isMicOn) {
-      if (!isActingMic) setIsActingMic(true); // 切換到演戲麥
-      else {
-        toggleMic();
-        setIsActingMic(false);
-      }
+    if (isActingMic) {
+      // 結束發言：先設 flag，再關麥（只在麥克風確實開著時才關）
+      setIsActingMic(false);
+      if (isMicOn) toggleMic();
     } else {
-      toggleMic();
+      // 開始發言：確保麥克風開啟
       setIsActingMic(true);
+      if (!isMicOn) toggleMic();
     }
   };
 
@@ -602,15 +598,27 @@ export const ActScreen: React.FC<ActScreenProps> = ({
   }, [socket, actId, act, onActComplete]);
 
   // ── 🌟 STT 字幕控制：僅在 isActingMic 下接收 ─────────────────────────────
+  // 用 ref 記錄「這次 acting 開始後才收到的字幕時間戳」，過濾掉舊字幕
+  const actingStartTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (isActingMic) {
+      // 記錄開麥時間，之後只接受這個時間點之後產生的字幕
+      actingStartTimeRef.current = Date.now();
+    }
+  }, [isActingMic]);
+
   useEffect(() => {
     if (!act) return;
     const beat = act.beats[beatIndex];
     if (beat?.type !== 'player_dialogue') return;
     if (beat.characterName !== myCharacter) return;
-    
     if (!isActingMic) return;
+    // 🌟 修正：只接受「開麥之後」產生的字幕，過濾掉舊的 currentSubtitle
+    if (!currentSubtitle) return;
+    if (Date.now() - actingStartTimeRef.current < 300) return; // 開麥後 300ms 內的字幕視為舊值忽略
 
-    if (currentSubtitle && currentSubtitle.includes(myCharacter)) {
+    if (currentSubtitle.includes(myCharacter)) {
       const parts = currentSubtitle.split(/[:：]/);
       const textOnly = parts.length > 1 ? parts.slice(1).join('：').trim() : currentSubtitle.trim();
       setDialogueSubtitle(prev => prev === textOnly ? prev : textOnly);

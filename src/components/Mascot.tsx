@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
-export const Mascot: React.FC<{ message?: string }> = ({ message: propMessage }) => {
+export const Mascot: React.FC<{ message?: React.ReactNode }> = ({ message: propMessage }) => {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [internalMessage, setInternalMessage] = useState('');
+  const [internalMessage, setInternalMessage] = useState<React.ReactNode>('');
   const [isPopping, setIsPopping] = useState(false);
   const [isFlapping, setIsFlapping] = useState(false);
 
   // 🌟 新增：全域事件監聽狀態
-  const [globalAlert, setGlobalAlert] = useState<{ message: string, isCentered: boolean } | null>(null);
+  const [globalAlert, setGlobalAlert] = useState<{ message: React.ReactNode, isCentered: boolean } | null>(null);
 
   useEffect(() => {
     const handler = (e: any) => {

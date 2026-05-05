@@ -1244,7 +1244,28 @@ export function registerSocketHandlers(io: Server) {
       // 🌟 非會議階段 (角色預覽、個人檔案、搜證、搜證結束) 開放自由開麥
       const isFreeMicPhase = ['room_lobby', 'character_preview', 'game_profile', 'game_search', 'search_end', 'truth_revealed'].includes(room.phase);
 
-      const user = room.meetingUsers.find(u => u.id === socket.id);
+      let user = room.meetingUsers.find(u => u.id === socket.id);
+
+      // 🌟 修正：自由開麥階段找不到 meetingUser 時，從 room.users 補建一筆臨時 entry
+      //    避免頭像列的麥克風圖示無法反映狀態
+      if (!user && isFreeMicPhase) {
+        const roomUser = room.users.find(u => u.id === socket.id);
+        if (roomUser) {
+          const entry = {
+            id: roomUser.id,
+            email: roomUser.email,
+            name: roomUser.name,
+            avatar: roomUser.avatar,
+            character: roomUser.assignedCharacter ?? '',
+            isMicOn: false,
+            lastSpokeTime: Date.now(),
+            isAI: false,
+          };
+          room.meetingUsers.push(entry);
+          user = entry;
+        }
+      }
+
       if (user) {
         // 會議階段才檢查「是否輪到你」；自由開麥階段任何人都能開
         if (!isFreeMicPhase && isOn && room.meetingUsers[room.currentSpeakerIndex]?.id !== socket.id) return;
