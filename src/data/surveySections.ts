@@ -55,8 +55,8 @@ export const calculatePRCAScores = (data: Record<number, number>) => {
   // 2. Meeting = 18 - (7) + (8) + (9) - (10) - (11) + (12)
   const meeting = 18 - get(7) + get(8) + get(9) - get(10) - get(11) + get(12);
 
-  // 3. Dyadic = 18 + (13) + (14) + (15) + (16) + (17) + (18)
-  const dyadic = 18 + get(13) + get(14) + get(15) + get(16) + get(17) + get(18);
+  // 3. Dyadic = 18 - (13) + (14) - (15) + (16) + (17) - (18)
+  const dyadic = 18 - get(13) + get(14) - get(15) + get(16) + get(17) - get(18);
 
   // 4. Public = 18 + (19) - (20) + (21) - (22) + (23) - (24)
   const publicScore = 18 + get(19) - get(20) + get(21) - get(22) + get(23) - get(24);

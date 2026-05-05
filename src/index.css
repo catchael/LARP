@@ -1,5 +1,7 @@
-@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
+@import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
@@ -39,4 +41,34 @@ body {
 
 .rotate-y-180 {
   transform: rotateY(180deg);
+}
+
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased;
+  }
+}
+
+@layer components {
+  .game-card {
+    @apply bg-white border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl overflow-hidden;
+  }
+  
+  .primary-button {
+    @apply px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50;
+  }
+
+  .secondary-button {
+    @apply px-8 py-4 bg-white border-2 border-slate-200 hover:border-indigo-200 text-slate-600 font-bold rounded-2xl transition-all active:scale-95;
+  }
+  
+  .progress-blob {
+    @apply absolute w-64 h-64 bg-indigo-100 rounded-full blur-3xl opacity-50 -z-10;
+  }
 }

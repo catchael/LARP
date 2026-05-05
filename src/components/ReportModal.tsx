@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, ChevronDown, ChevronUp, Star, TrendingUp, AlertCircle, CheckCircle, Lightbulb, MessageSquare, Brain, Users, Layers, FileText, Calendar, Hash } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Star, TrendingUp, AlertCircle, CheckCircle, Lightbulb, MessageSquare, Brain, Users, FileText, Calendar, Hash } from 'lucide-react';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { cn } from '../types';
 
 // ─── 型別 ─────────────────────────────────────────────────
 interface Scores {
   logic_score: number | null;
-  clarity_score: number | null;
   accessibility_score: number | null;
   coherence_score: number | null;
 }
@@ -16,8 +15,14 @@ interface TurnResult {
   turn: number;
   raw: string;
   repaired: string;
+  ptype?: string;
   golden: string;
-  verdicts: { a: any; b: any };
+  verdict: any;
+  reports?: {
+    logic: any;
+    accessibility: any;
+    structure: any;
+  };
 }
 
 interface ReportSummary {
@@ -49,6 +54,7 @@ interface ReportPageProps {
 
 // ─── 常數 ─────────────────────────────────────────────────
 const SCORE_MAX = 7;
+const SCORE_KEYS: Array<keyof Scores> = ['logic_score', 'accessibility_score', 'coherence_score'];
 
 // ─── 工具：1-7 分制顏色與標籤 ─────────────────────────────
 const scoreColor = (s: number | null) => {
@@ -118,33 +124,72 @@ const ScoreRing = ({ score, label, iconName: Icon, size = 'md' }: {
   );
 };
 
+// ─── 依存樹節點（遞迴渲染） ───────────────────────────────
+const TreeNode: React.FC<{ node: any; depth?: number }> = ({ node, depth = 0 }) => {
+  if (!node?.topic) return null;
+  return (
+    <div className="text-xs">
+      <div className="flex items-center gap-1.5 py-0.5">
+        <span className={cn(
+          'inline-block w-1.5 h-1.5 rounded-full shrink-0',
+          depth === 0 ? 'bg-orange-500' : depth === 1 ? 'bg-orange-400' : 'bg-orange-200'
+        )} />
+        <span className={cn(
+          depth === 0 ? 'font-bold text-slate-800' : 'text-slate-600'
+        )}>{node.topic}</span>
+      </div>
+      {Array.isArray(node.children) && node.children.length > 0 && (
+        <div className="ml-2 pl-2 border-l border-slate-200">
+          {node.children.map((child: any, i: number) => (
+            <TreeNode key={i} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── 表達類型 badge ───────────────────────────────────────
+const PtypeBadge = ({ ptype }: { ptype?: string }) => {
+  if (!ptype) return null;
+  const map: Record<string, { label: string; cls: string }> = {
+    argument:  { label: '論證型', cls: 'bg-purple-50 text-purple-600 border-purple-200' },
+    narrative: { label: '敘事型', cls: 'bg-blue-50 text-blue-600 border-blue-200' },
+    mixed:     { label: '混合型', cls: 'bg-slate-50 text-slate-600 border-slate-200' },
+  };
+  const m = map[ptype] ?? map.mixed;
+  return (
+    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border', m.cls)}>
+      {m.label}
+    </span>
+  );
+};
+
 // ─── 單份報告詳情（全螢幕）───────────────────────────────
 const ReportDetail = ({ report, scriptName, onBack }: {
   report: Report; scriptName: string; onBack: () => void;
 }) => {
   const [tab, setTab] = useState<'overview' | 'turns'>('overview');
   const [expandedTurn, setExpandedTurn] = useState<number | null>(null);
+  const [expandedAnalyst, setExpandedAnalyst] = useState<number | null>(null);
   const { summary, turns } = report;
   const { scores, strengths, weaknesses, top_fixes, total_turns, total_chars } = summary ?? {};
 
   const scoreValues = scores
-    ? [scores.logic_score, scores.clarity_score, scores.accessibility_score, scores.coherence_score]
-        .filter((v): v is number => v !== null && v !== undefined)
+    ? SCORE_KEYS.map(k => scores[k]).filter((v): v is number => v !== null && v !== undefined)
     : [];
   const overallScore: number | null = scoreValues.length > 0
     ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length : null;
 
   const radarData = [
-    { subject: '邏輯精確', value: scores?.logic_score ?? 0, fullMark: SCORE_MAX },
-    { subject: '易讀性',   value: scores?.clarity_score ?? 0, fullMark: SCORE_MAX },
+    { subject: '敘述精確', value: scores?.logic_score         ?? 0, fullMark: SCORE_MAX },
     { subject: '友善度',   value: scores?.accessibility_score ?? 0, fullMark: SCORE_MAX },
-    { subject: '連貫性',   value: scores?.coherence_score ?? 0, fullMark: SCORE_MAX },
+    { subject: '連貫性',   value: scores?.coherence_score     ?? 0, fullMark: SCORE_MAX },
   ];
 
   const dims: Array<{ scoreKey: keyof Scores; label: string; iconName: React.ElementType; desc: string }> = [
-    { scoreKey: 'logic_score',         label: '邏輯精確度', iconName: Brain,      desc: '陳述清晰，無歧義廢話' },
-    { scoreKey: 'clarity_score',       label: '易讀性',     iconName: Layers,     desc: '認知負擔低，句式清晰' },
-    { scoreKey: 'accessibility_score', label: '友善度',     iconName: Users,      desc: '無行話，背景鋪陳完整' },
+    { scoreKey: 'logic_score',         label: '敘述精確度', iconName: Brain,      desc: '陳述清晰，無歧義廢話' },
+    { scoreKey: 'accessibility_score', label: '友善度',     iconName: Users,      desc: '容易理解、容易跟上' },
     { scoreKey: 'coherence_score',     label: '連貫性',     iconName: TrendingUp, desc: '論點有序，不跑題' },
   ];
 
@@ -294,13 +339,12 @@ const ReportDetail = ({ report, scriptName, onBack }: {
               <p className="text-slate-500 text-sm text-center py-12">無逐輪分析資料</p>
             )}
             {turns?.map((turn, i) => {
-              const jA = turn.verdicts?.a || {};
-              const jB = turn.verdicts?.b || {};
+              const jv = turn.verdict || {};
+              const scoreObj = jv.scores ?? jv.final_scores ?? {};
               const sc: Record<string, number | null> = {};
-              ['logic_score','clarity_score','accessibility_score','coherence_score'].forEach(k => {
-                const sA = (jA.scores ?? jA.final_scores ?? {})[k];
-                const sB = (jB.scores ?? jB.final_scores ?? {})[k];
-                sc[k] = (sA != null && sB != null) ? (sA + sB) / 2 : (sA ?? sB ?? null);
+              SCORE_KEYS.forEach(k => {
+                const v = scoreObj[k];
+                sc[k] = typeof v === 'number' ? v : null;
               });
               const avg = Object.values(sc).filter((v): v is number => v !== null);
               const turnScore = avg.length > 0 ? avg.reduce((a, b) => a + b, 0) / avg.length : null;
@@ -316,11 +360,14 @@ const ReportDetail = ({ report, scriptName, onBack }: {
                       {i + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-700 truncate">
-                        {turn.raw?.slice(0, 70)}{(turn.raw?.length ?? 0) > 70 ? '...' : ''}
-                      </p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm text-slate-700 truncate flex-1">
+                          {turn.raw?.slice(0, 70)}{(turn.raw?.length ?? 0) > 70 ? '...' : ''}
+                        </p>
+                        <PtypeBadge ptype={turn.ptype} />
+                      </div>
                       <div className="flex gap-3 mt-1">
-                        {['logic_score','clarity_score','accessibility_score','coherence_score'].map(k => (
+                        {SCORE_KEYS.map(k => (
                           <span key={k} className={cn('text-[10px] font-bold', scoreColor(sc[k]))}>
                             {sc[k]?.toFixed(1) ?? '—'}
                           </span>
@@ -353,19 +400,122 @@ const ReportDetail = ({ report, scriptName, onBack }: {
                               <p className="text-sm text-slate-700 leading-relaxed">{turn.golden}</p>
                             </div>
                           </div>
-                          {(jA.one_line || jB.one_line) && (
+                          {jv.one_line && (
                             <div className="bg-white rounded-xl p-4 border border-slate-200">
                               <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">AI 評語</p>
-                              <p className="text-sm text-slate-700">{jA.one_line || jB.one_line}</p>
+                              <p className="text-sm text-slate-700">{jv.one_line}</p>
                             </div>
                           )}
-                          {(jA.top_fix || jB.top_fix || jA.critical_fix || jB.critical_fix) && (
+                          {(jv.top_fix || jv.critical_fix) && (
                             <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
                               <div className="flex items-center gap-1.5 mb-2">
                                 <Lightbulb size={11} className="text-indigo-600" />
                                 <span className="text-[10px] font-bold text-indigo-600 uppercase">改進建議</span>
                               </div>
-                              <p className="text-sm text-slate-700">{jA.top_fix || jB.top_fix || jA.critical_fix || jB.critical_fix}</p>
+                              <p className="text-sm text-slate-700">{jv.top_fix || jv.critical_fix}</p>
+                            </div>
+                          )}
+                          {/* 分析師詳細報告 */}
+                          {turn.reports && (
+                            <div className="mt-2 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-100 overflow-hidden shadow-sm">
+                              <button
+                                onClick={() => setExpandedAnalyst(expandedAnalyst === i ? null : i)}
+                                className="w-full px-5 py-4 flex items-center justify-between hover:bg-white/60 transition-all"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="bg-indigo-600 p-1.5 rounded-lg shadow-sm shadow-indigo-200">
+                                    <Brain size={16} className="text-white" />
+                                  </div>
+                                  <span className="text-sm font-black text-indigo-900 tracking-wide">分析師的詳細報告</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-indigo-600 bg-indigo-100/80 px-2 py-1 rounded-md">
+                                    {expandedAnalyst === i ? '收起' : '展開檢視'}
+                                  </span>
+                                  {expandedAnalyst === i ? <ChevronUp size={18} className="text-indigo-600" /> : <ChevronDown size={18} className="text-indigo-600" />}
+                                </div>
+                              </button>
+                              <AnimatePresence>
+                                {expandedAnalyst === i && (
+                                  <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+                                    <div className="px-4 pb-4 space-y-3 border-t border-slate-100">
+
+                                      {/* P2 邏輯 */}
+                                      <div className="pt-3">
+                                        <p className="text-[10px] font-bold text-purple-600 uppercase mb-2">⚖️ 明確性分析（Grice）</p>
+                                        {(turn.reports.logic?.issues?.length ?? 0) === 0
+                                          ? <p className="text-xs text-slate-400">無問題</p>
+                                          : turn.reports.logic.issues.map((iss: any, j: number) => (
+                                            <div key={j} className="mb-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                              <div className="flex items-center gap-2 mb-1">
+                                                <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded',
+                                                  iss.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+                                                )}>{iss.severity}</span>
+                                                <span className="text-[10px] text-slate-500">{iss.type}</span>
+                                              </div>
+                                              <p className="text-xs text-slate-600 italic mb-1">「{iss.quote}」</p>
+                                              <p className="text-xs text-slate-500">{iss.reason}</p>
+                                            </div>
+                                          ))
+                                        }
+                                      </div>
+
+                                      {/* P3 友善度（理解體驗） */}
+                                      <div>
+                                        <p className="text-[10px] font-bold text-blue-600 uppercase mb-2">🧠 友善度（理解體驗）</p>
+                                        {turn.reports.accessibility?.experience && (
+                                          <p className="text-xs text-slate-600 italic mb-2">{turn.reports.accessibility.experience}</p>
+                                        )}
+                                        {(turn.reports.accessibility?.issues?.length ?? 0) === 0
+                                          ? <p className="text-xs text-slate-400">無問題</p>
+                                          : turn.reports.accessibility.issues.map((iss: any, j: number) => (
+                                            <div key={j} className="mb-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                              <div className="flex items-center gap-2 mb-1">
+                                                <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded',
+                                                  iss.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+                                                )}>{iss.severity}</span>
+                                                <span className="text-[10px] text-slate-500">{iss.type}</span>
+                                              </div>
+                                              <p className="text-xs text-slate-600 italic mb-1">「{iss.quote}」</p>
+                                              <p className="text-xs text-slate-500">{iss.reason}</p>
+                                            </div>
+                                          ))
+                                        }
+                                      </div>
+
+                                      {/* P4 語篇結構 */}
+                                      <div>
+                                        <p className="text-[10px] font-bold text-orange-600 uppercase mb-2">🗂️ 語篇結構（依存樹分析）</p>
+                                        {turn.reports.structure?.flow_map && (
+                                          <p className="text-xs text-slate-500 mb-2">{turn.reports.structure.flow_map}</p>
+                                        )}
+                                        {turn.reports.structure?.tree && (
+                                          <div className="mb-3 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">主題依存樹</p>
+                                            <TreeNode node={turn.reports.structure.tree} />
+                                          </div>
+                                        )}
+                                        {(turn.reports.structure?.issues?.length ?? 0) === 0
+                                          ? <p className="text-xs text-slate-400">無問題</p>
+                                          : turn.reports.structure.issues.map((iss: any, j: number) => (
+                                            <div key={j} className="mb-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
+                                              <div className="flex items-center gap-2 mb-1">
+                                                <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded',
+                                                  iss.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
+                                                )}>{iss.severity}</span>
+                                                <span className="text-[10px] text-slate-500">{iss.type}</span>
+                                              </div>
+                                              <p className="text-xs text-slate-600 italic mb-1">「{iss.quote}」</p>
+                                              <p className="text-xs text-slate-500">{iss.reason}</p>
+                                            </div>
+                                          ))
+                                        }
+                                      </div>
+
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </div>
                           )}
                         </div>
@@ -425,7 +575,7 @@ const ReportList = ({ reports, latestReport, onSelectStored, onSelectLatest }: {
       const rd = r.report_data;
       const sc = rd?.scores ?? rd?.summary?.scores;
       const scriptName = rd?.script_name ?? rd?.summary?.script_name ?? '劇本殺';
-      const vals = sc ? Object.values(sc).filter((v): v is number => v !== null && typeof v === 'number') : [];
+      const vals = sc ? SCORE_KEYS.map(k => sc[k]).filter((v): v is number => v !== null && typeof v === 'number') : [];
       const avg = vals.length > 0 ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length : null;
 
       return (

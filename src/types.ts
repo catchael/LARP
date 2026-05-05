@@ -9,6 +9,8 @@ export function cn(...inputs: ClassValue[]) {
 export interface User {
   id: number;
   email: string;
+  name?: string;
+  avatar?: string;
   last_played: string;
 }
 
@@ -35,22 +37,32 @@ export interface AssessmentReport {
 }
 
 export type AppPhase =
-  | 'login' | 'intro' | 'survey' | 'lobby' | 'teaching'
+  | 'login' | 'avatar_selection' | 'intro' | 'survey' | 'lobby' | 'teaching'
   | 'script_lobby' | 'script_detail' | 'room_lobby'
   | 'character_preview' | 'game_profile' | 'mission_briefing'
-  | 'diary_reveal' // 🌟 加上這行
-  | 'game_search' | 'search_end' | 'game_meeting' | 'game_voting'
-  | 'game_ending' | 'truth_revealed';
+  | 'diary_reveal' | 'game_search' | 'search_end' | 'game_meeting' | 'game_voting'
+  | 'game_ending' | 'truth_revealed'| 'single_player';
 
 export interface RoomUser {
   id: string;
   email: string;
+  name?: string;
   isHost: boolean;
   selectedCharacter?: string;
   assignedCharacter?: string;
   avatar?: string;
   isReady?: boolean;
   connectionStatus?: 'online' | 'offline';
+}
+
+export interface MeetingUser {
+  id: string;
+  email: string;
+  name?: string;
+  avatar?: string;
+  character: string;
+  isMicOn?: boolean;
+  isAI?: boolean;
 }
 
 export interface RoomState {

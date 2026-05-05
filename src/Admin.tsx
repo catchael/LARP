@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, BookOpen, FileText, ClipboardList, ChevronDown, ChevronUp, X, Search, Activity, MessageSquare, Clock, TrendingUp, Shield, Eye, EyeOff } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis } from 'recharts';
+import { Users, BookOpen, FileText, ClipboardList, ChevronDown, ChevronUp, X, Search, Activity, MessageSquare, Clock, TrendingUp, Shield, Eye, EyeOff, LayoutDashboard, ArrowLeft, Trash2 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 
 // ─── 型別 ──────────────────────────────────────────────────
 interface DialogueLine { speaker: string; text: string; }
@@ -15,7 +15,7 @@ interface UserData {
   surveys: Survey[]; scripts: ScriptRecord[]; reports: AssessmentReport[];
 }
 
-// ─── PRCA 分數計算 ─────────────────────────────────────────
+// ─── 工具函數 ──────────────────────────────────────────────
 function calcPRCA(data: SurveyData) {
   const g = (id: number) => data[id] || 0;
   const group = 18 - g(1) + g(2) - g(3) + g(4) - g(5) + g(6);
@@ -24,6 +24,30 @@ function calcPRCA(data: SurveyData) {
   const pub = 18 + g(19) - g(20) + g(21) - g(22) + g(23) - g(24);
   return { group, meeting, dyadic, pub, total: group + meeting + dyadic + pub };
 }
+
+const getScoreColor = (score: number) => {
+  if (score >= 24) return 'text-emerald-400';
+  if (score >= 18) return 'text-indigo-400';
+  if (score >= 12) return 'text-amber-400';
+  return 'text-red-400';
+};
+
+const getScoreBg = (score: number) => {
+  if (score >= 24) return 'bg-emerald-500';
+  if (score >= 18) return 'bg-indigo-500';
+  if (score >= 12) return 'bg-amber-500';
+  return 'bg-red-500';
+};
+
+// 共用的空狀態元件
+const EmptyState = ({ icon: Icon, message }: { icon: any, message: string }) => (
+  <div className="bg-slate-900/30 border border-slate-800 border-dashed rounded-2xl p-12 text-center w-full mt-4">
+    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+      <Icon size={24} className="text-slate-500" />
+    </div>
+    <p className="text-slate-400 font-medium">{message}</p>
+  </div>
+);
 
 // ─── 主元件 ────────────────────────────────────────────────
 export default function Admin() {
@@ -34,9 +58,14 @@ export default function Admin() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+  
+  // 🌟 改存 ID，這樣刪除資料時不用手動同步兩個 state
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  
   const [tab, setTab] = useState<'overview' | 'scripts' | 'surveys' | 'reports'>('overview');
   const [expandedScript, setExpandedScript] = useState<number | null>(null);
+
+  const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId) || null, [users, selectedUserId]);
 
   const login = () => {
     if (keyInput === 'admin-secret-2024') {
@@ -53,391 +82,543 @@ export default function Admin() {
     fetch('/api/admin/users', { headers: { 'x-admin-key': 'admin-secret-2024' } })
       .then(r => r.json())
       .then(d => { setUsers(d.users || []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        console.error("Failed to fetch users:", err);
+        setLoading(false);
+      });
   }, [authed]);
 
-  const filtered = users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()));
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => u.email.toLowerCase().includes(search.toLowerCase()));
+  }, [users, search]);
+
+  // 🌟 刪除紀錄的通用處理函式
+  const handleDeleteRecord = async (type: 'script' | 'survey' | 'report', recordId: number, userId: number) => {
+    if (!window.confirm(`確定要永久刪除這筆${type === 'script' ? '劇本' : type === 'survey' ? '問卷' : '報告'}紀錄嗎？\n此動作無法復原！`)) {
+      return;
+    }
+
+    try {
+      // 呼叫後端 API (如果有後端的話)
+      await fetch(`/api/admin/records/${type}/${recordId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-key': 'admin-secret-2024' }
+      });
+    } catch (err) {
+      console.warn("API 刪除失敗，僅在本地移除 (測試模式):", err);
+    }
+
+    // 更新本地狀態，UI 會即時反映
+    setUsers(prevUsers => prevUsers.map(u => {
+      if (u.id !== userId) return u;
+      return {
+        ...u,
+        scripts: type === 'script' ? u.scripts.filter(r => r.id !== recordId) : u.scripts,
+        surveys: type === 'survey' ? u.surveys.filter(r => r.id !== recordId) : u.surveys,
+        reports: type === 'report' ? u.reports.filter(r => r.id !== recordId) : u.reports,
+      };
+    }));
+  };
 
   // ── 登入畫面 ───────────────────────────────────────────
   if (!authed) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-sm"
-        >
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
+        <div className="absolute top-1/4 -left-32 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 -right-32 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+
+        <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="w-full max-w-md relative z-10">
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4 shadow-lg shadow-indigo-500/30">
-              <Shield size={32} className="text-white" />
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-6 shadow-2xl shadow-indigo-500/20 ring-1 ring-white/10">
+              <Shield size={40} className="text-white drop-shadow-md" />
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">管理後台</h1>
-            <p className="text-slate-500 text-sm mt-1">輸入管理員金鑰以繼續</p>
+            <h1 className="text-3xl font-black text-white tracking-tight mb-2">管理員登入</h1>
+            <p className="text-slate-400 text-sm">請輸入授權金鑰以存取系統後台</p>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={keyInput}
-                onChange={e => { setKeyInput(e.target.value); setKeyError(false); }}
-                onKeyDown={e => e.key === 'Enter' && login()}
-                placeholder="Admin Key"
-                className={`w-full bg-slate-800 border rounded-xl px-4 py-3 text-white placeholder-slate-600 outline-none font-mono text-sm pr-12 transition-colors ${keyError ? 'border-red-500' : 'border-slate-700 focus:border-indigo-500'}`}
-              />
-              <button
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+          <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl">
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Admin Key</label>
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={keyInput}
+                    onChange={e => { setKeyInput(e.target.value); setKeyError(false); }}
+                    onKeyDown={e => e.key === 'Enter' && login()}
+                    placeholder="Enter secret key..."
+                    className={`w-full bg-slate-950/50 border rounded-xl px-5 py-4 text-white placeholder-slate-600 outline-none font-mono text-sm pr-12 transition-all ${
+                      keyError ? 'border-red-500/50 focus:border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.1)]' : 'border-slate-800 focus:border-indigo-500 focus:shadow-[0_0_20px_rgba(99,102,241,0.1)]'
+                    }`}
+                  />
+                  <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1">
+                    {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {keyError && <motion.p initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="text-red-400 text-xs mt-2 font-medium">驗證失敗，請檢查金鑰是否正確</motion.p>}
+              </div>
+              <button onClick={login} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/20 active:scale-[0.98] mt-2">
+                登入系統
               </button>
             </div>
-            {keyError && <p className="text-red-400 text-xs">金鑰錯誤，請再試一次</p>}
-            <button
-              onClick={login}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-colors"
-            >
-              進入後台
-            </button>
           </div>
         </motion.div>
       </div>
     );
   }
 
-  // ── 使用者詳情側邊欄 ──────────────────────────────────
-  const UserDetail = ({ u }: { u: UserData }) => {
-    const chartData = [...u.surveys].reverse().map(s => ({
+  // ── 🌟 全頁面：使用者詳情 ───────────────────────────────
+  if (selectedUser) {
+    const chartData = [...selectedUser.surveys].reverse().map(s => ({
       date: new Date(s.created_at).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }),
       total: calcPRCA(s.data).total
     }));
 
-    const latestSurvey = u.surveys[0];
+    const latestSurvey = selectedUser.surveys[0];
     const latestScores = latestSurvey ? calcPRCA(latestSurvey.data) : null;
     const radarData = latestScores ? [
-      { subject: '小組討論', value: latestScores.group, fullMark: 30 },
+      { subject: '小組', value: latestScores.group, fullMark: 30 },
       { subject: '會議', value: latestScores.meeting, fullMark: 30 },
-      { subject: '人際對話', value: latestScores.dyadic, fullMark: 30 },
-      { subject: '公開演講', value: latestScores.pub, fullMark: 30 },
+      { subject: '人際', value: latestScores.dyadic, fullMark: 30 },
+      { subject: '公開', value: latestScores.pub, fullMark: 30 },
     ] : [];
 
+    const TABS = [
+      { id: 'overview', label: '總覽', icon: LayoutDashboard, count: undefined },
+      { id: 'surveys', label: '問卷紀錄', icon: ClipboardList, count: selectedUser.surveys.length },
+      { id: 'scripts', label: '劇本紀錄', icon: BookOpen, count: selectedUser.scripts.length },
+      { id: 'reports', label: '分析報告', icon: FileText, count: selectedUser.reports.length },
+    ] as const;
+
     return (
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: 0 }}
-        exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 220 }}
-        className="fixed inset-y-0 right-0 w-full max-w-2xl bg-slate-900 border-l border-slate-800 z-50 flex flex-col shadow-2xl"
-      >
-        {/* Header */}
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-          <div>
-            <div className="font-bold text-white text-lg">{u.email}</div>
-            <div className="text-xs text-slate-500 mt-0.5">
-              最後遊玩：{new Date(u.last_played).toLocaleString('zh-TW')}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-slate-950 flex flex-col selection:bg-indigo-500/30">
+        
+        {/* Header - 返回與基本資訊 */}
+        <div className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800 px-8 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={() => { setSelectedUserId(null); setTab('overview'); }}
+              className="p-2.5 bg-slate-900 border border-slate-800 hover:border-slate-600 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-indigo-900/50 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-black text-xl shadow-inner">
+                {selectedUser.email[0].toUpperCase()}
+              </div>
+              <div>
+                <h2 className="font-bold text-white text-xl tracking-tight leading-none">{selectedUser.email}</h2>
+                <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+                  <Clock size={14} /> 最後活動：{new Date(selectedUser.last_played).toLocaleString('zh-TW')}
+                </p>
+              </div>
             </div>
           </div>
-          <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400">
-            <X size={20} />
-          </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-slate-800 px-4 pt-2">
-          {([['overview', '總覽'], ['scripts', '對話紀錄'], ['surveys', '問卷'], ['reports', '評估報告']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${tab === key ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* 內容區塊與功能列 */}
+        <div className="flex-1 max-w-6xl w-full mx-auto p-8">
+          
+          {/* Navigation Tabs */}
+          <div className="flex gap-3 mb-8">
+            {TABS.map(({ id, label, icon: Icon, count }) => (
+              <button
+                key={id}
+                onClick={() => setTab(id as any)}
+                className={`flex-1 flex items-center justify-center gap-2 py-4 px-6 rounded-2xl text-base font-bold transition-all ${
+                  tab === id
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 scale-100'
+                    : 'bg-slate-900/80 border border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+                {count !== undefined && (
+                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full ml-1 ${tab === id ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* 總覽 */}
-          {tab === 'overview' && (
-            <>
-              {/* 統計卡片 */}
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: '劇本場次', value: u.scripts.length, iconName: BookOpen, color: 'indigo' },
-                  { label: '問卷填寫', value: u.surveys.length, iconName: ClipboardList, color: 'emerald' },
-                  { label: '評估報告', value: u.reports.length, iconName: FileText, color: 'amber' },
-                ].map(({ label, value, iconName: Icon, color }) => (
-                  <div key={label} className={`bg-${color}-950/40 border border-${color}-900/50 rounded-xl p-4 text-center`}>
-                    <Icon size={20} className={`text-${color}-400 mx-auto mb-2`} />
-                    <div className={`text-2xl font-black text-${color}-400`}>{value}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{label}</div>
+          {/* 🌟 拔除 AnimatePresence，改用單純的 motion.div 淡入，徹底解決上下跳動問題 */}
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
+            className="w-full"
+          >
+            {/* ─── 總覽 ─── */}
+            {tab === 'overview' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-3 gap-6">
+                  {[
+                    { label: '參與劇本', value: selectedUser.scripts.length, icon: BookOpen, color: 'indigo' },
+                    { label: '填寫問卷', value: selectedUser.surveys.length, icon: ClipboardList, color: 'emerald' },
+                    { label: '分析報告', value: selectedUser.reports.length, icon: FileText, color: 'amber' },
+                  ].map(({ label, value, icon: Icon, color }) => (
+                    <div key={label} className={`bg-slate-900/40 border border-slate-800/80 rounded-3xl p-6 relative overflow-hidden group hover:border-${color}-500/30 transition-colors`}>
+                      <div className={`absolute -right-4 -top-4 w-24 h-24 bg-${color}-500/5 rounded-full blur-2xl group-hover:bg-${color}-500/10 transition-colors`} />
+                      <Icon size={28} className={`text-${color}-400 mb-4 relative z-10`} />
+                      <div className="text-4xl font-black text-white relative z-10 mb-1">{value}</div>
+                      <div className="text-slate-400 relative z-10 font-medium">{label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  {chartData.length > 0 && (
+                    <div className="bg-slate-900/40 rounded-3xl p-8 border border-slate-800/80">
+                      <h4 className="text-lg font-bold text-white mb-8 flex items-center gap-2">
+                        <TrendingUp size={20} className="text-indigo-400" /> PRCA 總分變化趨勢
+                      </h4>
+                      <div className="h-[250px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                            <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                            <YAxis domain={[24, 120]} stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
+                            <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#f8fafc' }} itemStyle={{ color: '#818cf8', fontWeight: 'bold' }} labelStyle={{ color: '#94a3b8', marginBottom: '4px' }} />
+                            <Line type="monotone" dataKey="total" name="總分" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, fill: '#1e293b', strokeWidth: 2, stroke: '#6366f1' }} activeDot={{ r: 6, fill: '#6366f1' }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {radarData.length > 0 && latestScores && (
+                    <div className="bg-slate-900/40 rounded-3xl p-8 border border-slate-800/80">
+                      <div className="flex items-center justify-between mb-8">
+                        <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                          <Activity size={20} className="text-emerald-400" /> 最新問卷能力雷達
+                        </h4>
+                        <span className="text-xs px-3 py-1 bg-slate-800 rounded-full text-slate-400 border border-slate-700">
+                          {new Date(latestSurvey!.created_at).toLocaleDateString('zh-TW')}
+                        </span>
+                      </div>
+                      <div className="flex flex-col xl:flex-row gap-8 items-center">
+                        <div className="w-[200px] h-[200px] shrink-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                              <PolarGrid stroke="#334155" />
+                              <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 'bold' }} />
+                              <PolarRadiusAxis domain={[0, 30]} tick={false} axisLine={false} />
+                              <Radar name="Score" dataKey="value" stroke="#10b981" fill="#10b981" fillOpacity={0.3} strokeWidth={2} />
+                            </RadarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="flex-1 w-full space-y-4">
+                          {[
+                            { label: '小組討論', value: latestScores.group },
+                            { label: '參與會議', value: latestScores.meeting },
+                            { label: '人際對話', value: latestScores.dyadic },
+                            { label: '公開演講', value: latestScores.pub },
+                          ].map(({ label, value }) => (
+                            <div key={label}>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-sm text-slate-400">{label}</span>
+                                <span className={`text-sm font-bold ${getScoreColor(value)}`}>{value} <span className="text-xs font-normal text-slate-600">/ 30</span></span>
+                              </div>
+                              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${getScoreBg(value)}`} style={{ width: `${(value / 30) * 100}%` }} />
+                              </div>
+                            </div>
+                          ))}
+                          <div className="pt-4 mt-2 border-t border-slate-800 flex justify-between items-end">
+                            <span className="text-sm text-slate-500 font-bold">總分 (PRCA-24)</span>
+                            <div className="text-right">
+                              <span className={`text-3xl font-black ${getScoreColor(latestScores.total / 4)}`}>{latestScores.total}</span>
+                              <span className="text-sm text-slate-600 ml-1">/ 120</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ─── 問卷紀錄 ─── */}
+            {tab === 'surveys' && (
+              <div className="grid grid-cols-2 gap-4">
+                {selectedUser.surveys.length === 0 ? <EmptyState icon={ClipboardList} message="尚無問卷填寫紀錄" /> : selectedUser.surveys.map((s) => {
+                  const sc = calcPRCA(s.data);
+                  return (
+                    <div key={s.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 relative group hover:border-slate-700 transition-colors">
+                      <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center border border-slate-800">
+                            <ClipboardList size={20} className="text-emerald-400" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-white">表達焦慮量表 (PRCA-24)</div>
+                            <div className="text-xs text-slate-500 mt-0.5">{new Date(s.created_at).toLocaleString('zh-TW')}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className={`text-2xl font-black ${getScoreColor(sc.total / 4)}`}>{sc.total}</div>
+                            <div className="text-[10px] text-slate-500 uppercase font-bold mt-1">Total Score</div>
+                          </div>
+                          {/* 🌟 刪除按鈕 */}
+                          <button onClick={() => handleDeleteRecord('survey', s.id, selectedUser.id)} className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3">
+                        {[{ l: '小組', v: sc.group }, { l: '會議', v: sc.meeting }, { l: '人際', v: sc.dyadic }, { l: '演講', v: sc.pub }].map(({ l, v }) => (
+                          <div key={l} className="bg-slate-900/80 rounded-xl p-3 text-center border border-slate-800/50">
+                            <div className="text-xs text-slate-400 mb-1">{l}</div>
+                            <div className={`text-lg font-bold ${getScoreColor(v)}`}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ─── 劇本紀錄 ─── */}
+            {tab === 'scripts' && (
+              <div className="space-y-4">
+                {selectedUser.scripts.length === 0 ? <EmptyState icon={BookOpen} message="尚無劇本遊玩紀錄" /> : selectedUser.scripts.map((r) => (
+                  <div key={r.id} className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden group">
+                    <div className="flex items-center">
+                      <button onClick={() => setExpandedScript(expandedScript === r.id ? null : r.id)} className="flex-1 p-6 flex items-center justify-between hover:bg-slate-800/50 transition-colors text-left">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-indigo-900/20 flex items-center justify-center border border-indigo-500/20">
+                            <BookOpen size={20} className="text-indigo-400" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-white text-lg">{r.script_name}</div>
+                            <div className="text-sm text-slate-500 mt-1 flex items-center gap-3">
+                              <span className="flex items-center gap-1.5"><Clock size={14} /> {new Date(r.created_at).toLocaleString('zh-TW')}</span>
+                              <span className="flex items-center gap-1.5 text-indigo-400/80"><MessageSquare size={14} /> {r.dialogue.length} 則對話</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center">
+                          {expandedScript === r.id ? <ChevronUp size={20} className="text-white" /> : <ChevronDown size={20} className="text-slate-400" />}
+                        </div>
+                      </button>
+                      
+                      {/* 🌟 刪除按鈕獨立在右側 */}
+                      <div className="pr-6 pl-2">
+                        <button onClick={() => handleDeleteRecord('script', r.id, selectedUser.id)} className="p-3 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20">
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <AnimatePresence>
+                      {expandedScript === r.id && (
+                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-slate-800 bg-slate-950/50">
+                          <div className="p-6 space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar">
+                            {r.dialogue.map((d, i) => {
+                              const isSystem = d.speaker === '系統';
+                              return (
+                                <div key={i} className={`flex flex-col ${isSystem ? 'items-center' : 'items-start'} mb-4 last:mb-0`}>
+                                  {!isSystem && <span className="text-[11px] font-bold text-slate-500 mb-1 ml-1">{d.speaker}</span>}
+                                  <div className={`px-5 py-3 rounded-2xl text-sm max-w-[85%] ${isSystem ? 'bg-slate-800/50 text-slate-400 text-xs border border-slate-700/50 rounded-xl' : 'bg-indigo-600/20 text-indigo-100 border border-indigo-500/30 rounded-tl-sm'}`}>
+                                    {d.text}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 ))}
               </div>
+            )}
 
-              {/* PRCA 趨勢圖 */}
-              {chartData.length > 0 && (
-                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                  <h4 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
-                    <TrendingUp size={14} className="text-emerald-400" /> PRCA 總分趨勢
-                  </h4>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                      <XAxis dataKey="date" stroke="#64748b" fontSize={10} />
-                      <YAxis domain={[24, 120]} stroke="#64748b" fontSize={10} />
-                      <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8 }} labelStyle={{ color: '#94a3b8' }} />
-                      <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: '#6366f1' }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+            {/* ─── 評估報告 ─── */}
+            {tab === 'reports' && (
+              <div className="grid grid-cols-2 gap-6">
+                {selectedUser.reports.length === 0 ? <EmptyState icon={FileText} message="尚無 AI 分析報告" /> : selectedUser.reports.map((r) => (
+                  <div key={r.id} className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 relative hover:border-slate-700 transition-colors group">
+                    <div className="flex justify-between items-start mb-8">
+                      <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-amber-900/20 flex items-center justify-center border border-amber-500/20">
+                          <FileText size={24} className="text-amber-400" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-lg">{r.report_data.scriptName || '劇本分析'}</div>
+                          <div className="text-sm text-slate-500 mt-1">{new Date(r.created_at).toLocaleString('zh-TW')}</div>
+                        </div>
+                      </div>
+                      
+                      {/* 🌟 刪除按鈕 */}
+                      <button onClick={() => handleDeleteRecord('report', r.id, selectedUser.id)} className="p-3 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-colors border border-transparent hover:border-red-500/20">
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
 
-              {/* 最新 PRCA 雷達圖 */}
-              {radarData.length > 0 && (
-                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                  <h4 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
-                    <Activity size={14} className="text-indigo-400" /> 最新問卷分佈
-                    <span className="text-xs text-slate-500 font-normal">（{new Date(latestSurvey!.created_at).toLocaleDateString('zh-TW')}）</span>
-                  </h4>
-                  <div className="flex gap-6 items-center">
-                    <ResponsiveContainer width={180} height={160}>
-                      <RadarChart data={radarData}>
-                        <PolarGrid stroke="#334155" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10 }} />
-                        <Radar dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.3} />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                    <div className="flex-1 space-y-2">
-                      {[
-                        { label: '小組討論', value: latestScores!.group },
-                        { label: '會議', value: latestScores!.meeting },
-                        { label: '人際對話', value: latestScores!.dyadic },
-                        { label: '公開演講', value: latestScores!.pub },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="flex items-center justify-between">
-                          <span className="text-xs text-slate-400">{label}</span>
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(value / 30) * 100}%` }} />
-                            </div>
-                            <span className="text-xs font-bold text-slate-300 w-6 text-right">{value}</span>
-                          </div>
+                    <div className="grid grid-cols-3 gap-4 mb-8">
+                      {[{ label: '發言次數', val: r.report_data.totalLines, unit: '次' }, { label: '累計字數', val: r.report_data.totalChars, unit: '字' }, { label: '平均語速', val: r.report_data.avgCPM, unit: 'CPM' }].map(({ label, val, unit }) => (
+                        <div key={label} className="bg-slate-900/80 rounded-2xl p-4 text-center border border-slate-800/50">
+                          <div className="text-xs text-slate-400 mb-1">{label}</div>
+                          <div className="text-xl font-bold text-white">{val || 0} <span className="text-xs text-slate-500 font-normal">{unit}</span></div>
                         </div>
                       ))}
-                      <div className="pt-2 border-t border-slate-700 flex justify-between">
-                        <span className="text-xs text-slate-400">總分</span>
-                        <span className="text-sm font-black text-indigo-400">{latestScores!.total}</span>
-                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
 
-          {/* 對話紀錄 */}
-          {tab === 'scripts' && (
-            <div className="space-y-3">
-              {u.scripts.length === 0 ? (
-                <p className="text-sm text-slate-500 italic">尚無對話紀錄</p>
-              ) : u.scripts.map(r => (
-                <div key={r.id} className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-                  <button
-                    onClick={() => setExpandedScript(expandedScript === r.id ? null : r.id)}
-                    className="w-full p-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors text-left"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-200 text-sm">{r.script_name}</div>
-                      <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                        <Clock size={10} />
-                        {new Date(r.created_at).toLocaleString('zh-TW')}
-                        <MessageSquare size={10} />
-                        {r.dialogue.length} 則對話
-                      </div>
-                    </div>
-                    {expandedScript === r.id ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-                  </button>
-                  <AnimatePresence>
-                    {expandedScript === r.id && (
-                      <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-slate-700/50">
-                        <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
-                          {r.dialogue.map((d, i) => (
-                            <div key={i} className="flex gap-2 text-sm">
-                              <span className="text-indigo-400 font-medium shrink-0">{d.speaker}</span>
-                              <span className="text-slate-300">：{d.text}</span>
+                    {Object.entries(r.report_data.scores || {}).length > 0 && (
+                      <div className="space-y-4 mb-8">
+                        {Object.entries(r.report_data.scores).map(([key, val]) => {
+                          const displayScore = typeof val === 'number' ? (val <= 7 ? val : (val / 100) * 7) : 0;
+                          const percentage = (displayScore / 7) * 100;
+                          const keyMap: Record<string, string> = { logic_score: '邏輯精確', accessibility_score: '表達友善', coherence_score: '內容連貫' };
+                          
+                          return (
+                            <div key={key} className="flex items-center gap-4">
+                              <span className="text-sm text-slate-300 w-20 shrink-0 font-bold">{keyMap[key] || key}</span>
+                              <div className="flex-1 h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                                <div className={`h-full rounded-full ${getScoreBg(displayScore * 4)}`} style={{ width: `${percentage}%` }} />
+                              </div>
+                              <span className={`text-sm font-bold w-10 text-right ${getScoreColor(displayScore * 4)}`}>{displayScore.toFixed(1)}</span>
                             </div>
-                          ))}
-                        </div>
-                      </motion.div>
+                          );
+                        })}
+                      </div>
                     )}
-                  </AnimatePresence>
-                </div>
-              ))}
-            </div>
-          )}
 
-          {/* 問卷 */}
-          {tab === 'surveys' && (
-            <div className="space-y-3">
-              {u.surveys.length === 0 ? (
-                <p className="text-sm text-slate-500 italic">尚無問卷紀錄</p>
-              ) : u.surveys.map(s => {
-                const sc = calcPRCA(s.data);
-                return (
-                  <div key={s.id} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="text-xs text-slate-500">{new Date(s.created_at).toLocaleString('zh-TW')}</div>
-                      <div className="text-lg font-black text-indigo-400">{sc.total} 分</div>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[['小組', sc.group], ['會議', sc.meeting], ['人際', sc.dyadic], ['演講', sc.pub]].map(([label, val]) => (
-                        <div key={label as string} className="text-center bg-slate-900/50 rounded-lg p-2">
-                          <div className="text-xs text-slate-500">{label}</div>
-                          <div className="text-sm font-bold text-slate-200">{val}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* 評估報告 */}
-          {tab === 'reports' && (
-            <div className="space-y-3">
-              {u.reports.length === 0 ? (
-                <p className="text-sm text-slate-500 italic">尚無評估報告</p>
-              ) : u.reports.map(r => (
-                <div key={r.id} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div className="font-bold text-slate-200 text-sm">{r.report_data.scriptName}</div>
-                    <div className="text-xs text-slate-500">{new Date(r.created_at).toLocaleString('zh-TW')}</div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      ['發言次數', r.report_data.totalLines, '次'],
-                      ['累計字數', r.report_data.totalChars, '字'],
-                      ['語速', r.report_data.avgCPM, 'CPM'],
-                    ].map(([label, val, unit]) => (
-                      <div key={label as string} className="bg-slate-900/50 rounded-lg p-2 text-center">
-                        <div className="text-xs text-slate-500">{label}</div>
-                        <div className="text-sm font-bold text-slate-200">{val}<span className="text-xs text-slate-500 ml-0.5">{unit}</span></div>
+                    {r.report_data.summary && (
+                      <div className="bg-indigo-900/10 border border-indigo-500/20 p-5 rounded-2xl relative">
+                        <div className="absolute top-0 left-5 -translate-y-1/2 bg-slate-900 px-3 text-xs font-bold text-indigo-400 uppercase tracking-wider border border-indigo-500/20 rounded-full">AI 總結評語</div>
+                        <p className="text-sm text-indigo-100/80 leading-relaxed pt-2">{r.report_data.summary}</p>
                       </div>
-                    ))}
+                    )}
                   </div>
-                  {Object.entries(r.report_data.scores || {}).length > 0 && (
-                    <div className="space-y-1.5">
-                      {Object.entries(r.report_data.scores).map(([key, val]) => (
-                        <div key={key} className="flex items-center gap-2">
-                          <span className="text-xs text-slate-400 w-16 shrink-0">{key}</span>
-                          <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${Math.min(100, val as number)}%` }} />
-                          </div>
-                          <span className="text-xs font-bold text-slate-300 w-8 text-right">{val}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-xs text-slate-400 bg-slate-900/50 p-3 rounded-lg">{r.report_data.summary}</p>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </motion.div>
         </div>
       </motion.div>
     );
-  };
+  }
 
-  // ── 主畫面 ────────────────────────────────────────────
+  // ── 🌟 大廳畫面：使用者列表 ───────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Header */}
-      <div className="border-b border-slate-800 px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <Shield size={16} className="text-white" />
+    <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-indigo-500/30">
+      {/* 頂部導航欄 */}
+      <div className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800 px-8 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <Shield size={20} className="text-white" />
           </div>
-          <h1 className="text-lg font-black tracking-tight">管理後台</h1>
-          <span className="text-xs bg-indigo-950 text-indigo-400 border border-indigo-800 px-2 py-0.5 rounded-full font-medium">Admin</span>
+          <div>
+            <h1 className="text-xl font-black text-white tracking-tight leading-none">系統管理中心</h1>
+            <div className="text-xs text-indigo-400 font-medium mt-1 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> 伺服器運作中
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-3 text-sm text-slate-400">
-          <Users size={14} />
-          {users.length} 位使用者
+        <div className="flex items-center gap-4">
+          <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-lg flex items-center gap-2">
+            <Users size={16} className="text-slate-400" />
+            <span className="text-sm font-bold text-white">{users.length}</span>
+            <span className="text-xs text-slate-500">位註冊玩家</span>
+          </div>
+          <button onClick={() => { setAuthed(false); setKeyInput(''); }} className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors">
+            登出
+          </button>
         </div>
       </div>
 
-      <div className="p-8">
-        {/* 搜尋 */}
-        <div className="relative mb-6 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="搜尋使用者 Email..."
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-indigo-600 transition-colors placeholder-slate-600"
-          />
+      <div className="p-8 max-w-7xl mx-auto">
+        <div className="mb-8 flex items-center justify-between">
+          <div className="relative w-full max-w-md group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <Search size={18} className="text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
+            </div>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="輸入玩家 Email 進行搜尋..."
+              className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500 focus:bg-slate-900 transition-all shadow-sm"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-500 hover:text-slate-300">
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex flex-col items-center justify-center py-32">
+            <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-4" />
+            <p className="text-slate-400 font-medium animate-pulse">載入玩家資料中...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map(u => {
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {filteredUsers.map(u => {
               const latestSurvey = u.surveys[0];
               const score = latestSurvey ? calcPRCA(latestSurvey.data).total : null;
+              
               return (
                 <motion.button
                   key={u.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => { setSelectedUser(u); setTab('overview'); setExpandedScript(null); }}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-left hover:border-indigo-700 hover:bg-slate-800/50 transition-all group"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ y: -4 }}
+                  onClick={() => { setSelectedUserId(u.id); setTab('overview'); setExpandedScript(null); }}
+                  className="bg-slate-900/40 backdrop-blur-sm border border-slate-800 rounded-3xl p-6 text-left hover:border-indigo-500/50 hover:bg-slate-800/80 transition-all group shadow-sm hover:shadow-xl hover:shadow-indigo-500/10 flex flex-col h-full"
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-950 border border-indigo-800 flex items-center justify-center text-indigo-400 font-black text-lg">
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 flex items-center justify-center text-slate-300 font-black text-xl shadow-inner group-hover:from-indigo-900 group-hover:to-slate-900 group-hover:text-indigo-400 group-hover:border-indigo-700/50 transition-all">
                       {u.email[0].toUpperCase()}
                     </div>
                     {score !== null && (
-                      <div className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-1 rounded-full font-bold">
-                        {score} 分
+                      <div className="flex flex-col items-end">
+                        <span className={`text-xl font-black ${getScoreColor(score / 4)} leading-none mb-1`}>{score}</span>
+                        <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold">PRCA 分數</span>
                       </div>
                     )}
                   </div>
-                  <div className="font-bold text-slate-200 text-sm truncate group-hover:text-white transition-colors">{u.email}</div>
-                  <div className="text-xs text-slate-500 mt-1 truncate">
-                    {new Date(u.last_played).toLocaleString('zh-TW')}
+                  
+                  <div className="flex-1">
+                    <div className="font-bold text-white text-base truncate group-hover:text-indigo-300 transition-colors mb-1" title={u.email}>{u.email}</div>
+                    <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                      <Clock size={12} /> {new Date(u.last_played).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </div>
                   </div>
-                  <div className="flex gap-3 mt-4 pt-4 border-t border-slate-800">
+
+                  <div className="grid grid-cols-3 gap-2 mt-6 pt-5 border-t border-slate-800/80">
                     {[
-                      { iconName: BookOpen, count: u.scripts.length, label: '劇本' },
-                      { iconName: ClipboardList, count: u.surveys.length, label: '問卷' },
-                      { iconName: FileText, count: u.reports.length, label: '報告' },
-                    ].map(({ iconName: Icon, count, label }) => (
-                      <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <Icon size={11} />
-                        <span>{count} {label}</span>
+                      { icon: BookOpen, count: u.scripts.length, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
+                      { icon: ClipboardList, count: u.surveys.length, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                      { icon: FileText, count: u.reports.length, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                    ].map((item, idx) => (
+                      <div key={idx} className={`flex flex-col items-center justify-center p-2 rounded-xl ${item.bg} border border-transparent group-hover:border-white/5 transition-colors`}>
+                        <item.icon size={14} className={`${item.color} mb-1`} />
+                        <span className="text-sm font-bold text-slate-300">{item.count}</span>
                       </div>
                     ))}
                   </div>
                 </motion.button>
               );
             })}
-            {filtered.length === 0 && (
-              <div className="col-span-3 text-center py-16 text-slate-600">
-                <Users size={32} className="mx-auto mb-3 opacity-30" />
-                <p>找不到符合的使用者</p>
+            
+            {filteredUsers.length === 0 && (
+              <div className="col-span-full flex flex-col items-center justify-center py-32 bg-slate-900/20 border border-slate-800 border-dashed rounded-3xl">
+                <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center mb-4">
+                  <Search size={32} className="text-slate-600" />
+                </div>
+                <p className="text-lg font-bold text-white mb-2">找不到符合的玩家</p>
+                <p className="text-slate-500 text-sm">請嘗試使用其他 Email 關鍵字進行搜尋</p>
               </div>
             )}
           </div>
         )}
       </div>
-
-      <AnimatePresence>
-        {selectedUser && <UserDetail u={selectedUser} />}
-      </AnimatePresence>
     </div>
   );
 }

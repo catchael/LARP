@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { ArrowLeft, BookOpen, ChevronRight, Clock, Plus, Users, Zap } from 'lucide-react';
 import { AppPhase, User, cn } from '../types';
 import { SCRIPTS } from '../data/scripts';
+import { ScriptCover } from '../components/ScriptCover'; // 確保路徑正確
 
 interface ScriptDetailScreenProps {
   previewScript: typeof SCRIPTS[0] | null;
@@ -35,7 +36,13 @@ export const ScriptDetailScreen: React.FC<ScriptDetailScreenProps> = ({
   const handleCreateRoom = (isPublic: boolean) => {
     if (!previewScript) return;
     setIsPublicRoom(isPublic);
-    socket?.emit('create_room', { email: user?.email, scriptId: previewScript.id, isPublic });
+    socket.emit('create_room', {
+      email: user?.email,
+      name: user?.name,
+      avatar: user?.avatar,
+      scriptId: previewScript.id,
+      isPublic: isPublicRoom
+    });
     setShowCreateModal(false);
   };
 
@@ -45,12 +52,7 @@ export const ScriptDetailScreen: React.FC<ScriptDetailScreenProps> = ({
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-5xl w-full">
       <div className="glass overflow-hidden rounded-[3rem] shadow-2xl flex flex-col md:flex-row">
         <div className="md:w-1/2 relative h-80 md:h-auto">
-          <img
-            src={previewScript.image}
-            alt={previewScript.title}
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
+          <ScriptCover scriptId={previewScript.id} />
           <button
             onClick={() => setPhase('script_lobby')}
             className="absolute top-8 left-8 p-3 bg-white/20 backdrop-blur-md rounded-2xl text-white hover:bg-white/40 transition-colors border border-white/30"

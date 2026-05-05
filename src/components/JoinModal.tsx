@@ -62,7 +62,12 @@ export const JoinModal: React.FC<JoinModalProps> = ({
                   if (e.key === 'Enter') {
                     const val = (e.target as HTMLInputElement).value;
                     if (val) {
-                      socket?.emit('join_room', { email: user?.email, roomId: val.toUpperCase().trim() });
+                      socket.emit('join_room', { 
+                        email: user?.email, 
+                        name: user?.name,
+                        avatar: user?.avatar, 
+                        roomId: val,
+                      }); // 👈 修改這裡
                       setShowJoinModal(false);
                     }
                   }
@@ -72,7 +77,12 @@ export const JoinModal: React.FC<JoinModalProps> = ({
                 onClick={() => {
                   const input = document.getElementById('manual-room-id') as HTMLInputElement;
                   if (input.value) {
-                    socket?.emit('join_room', { email: user?.email, roomId: input.value.toUpperCase().trim() });
+                    socket.emit('join_room', { 
+                      email: user?.email, 
+                      name: user?.name,
+                      avatar: user?.avatar, 
+                      roomId: input.value 
+                    }); // 👈 修改這裡
                     setShowJoinModal(false);
                   }
                 }}
@@ -98,7 +108,12 @@ export const JoinModal: React.FC<JoinModalProps> = ({
                   <button
                     key={room.id}
                     onClick={() => {
-                      socket?.emit('join_room', { email: user?.email, roomId: room.id });
+                      socket.emit('join_room', { 
+                        email: user?.email, 
+                        name: user?.name, 
+                        avatar: user?.avatar,
+                        roomId: room.id 
+                      }); // 👈 修改這裡
                       setShowJoinModal(false);
                     }}
                     className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-indigo-50/50 transition-all group"

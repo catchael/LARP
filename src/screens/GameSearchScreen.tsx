@@ -1,6 +1,6 @@
-import React from 'react';
-import { motion } from 'motion/react';
-import { ArrowLeft, Clock, ShoppingCart, Briefcase, BookOpen } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ArrowLeft, Clock, ShoppingCart, Briefcase, BookOpen, HelpCircle, X } from 'lucide-react';
 import { RoomState, User, cn } from '../types';
 import { ROOMS } from '../gameData';
 import { CharacterMessageBubble } from '../components/CharacterMessageBubble';
@@ -48,6 +48,7 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
   shopModal,
 }) => {
   if (!previewScript || !roomState) return null;
+  const [showTutorial, setShowTutorial] = useState(true);
 
   // 🌟 新增：取得當前劇本 ID 與房間資料
   const scriptId = roomState.scriptId ?? 1;
@@ -148,6 +149,16 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
 
       {/* 右側懸浮按鈕 */}
       <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-40">
+        {/* 🌟 新增：教學提示按鈕 */}
+        <motion.button
+          whileHover={{ scale: 1.12 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowTutorial(true)}
+          className="w-14 h-14 bg-slate-800 border border-slate-500 rounded-full flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(255,255,255,0.1)] backdrop-blur-sm relative hover:bg-slate-700 hover:border-slate-400 transition-colors"
+        >
+          <HelpCircle size={24} />
+        </motion.button>
+        
         <motion.button
           whileHover={{ scale: 1.12 }}
           whileTap={{ scale: 0.95 }}
@@ -201,10 +212,63 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
         </span>
       </div>
 
+      {/* 原本的背包、筆記本等彈窗 */}
       {backpackPanel}
       {notebookModal}
       {evidenceModal}
       {shopModal}
+
+      {/* 🌟 新增：搜查階段指南彈窗 */}
+      <AnimatePresence>
+        {showTutorial && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden"
+            >
+              <div className="bg-indigo-900/50 border-b border-indigo-500/30 px-6 py-4 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-indigo-100 flex items-center gap-2">
+                  <HelpCircle size={20} className="text-indigo-400" />
+                  搜查階段指南
+                </h3>
+                <button onClick={() => setShowTutorial(false)} className="text-slate-400 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-4 text-slate-300 text-sm leading-relaxed">
+                <ul className="space-y-3 list-disc pl-5">
+                  <li>背包空間僅有 <span className="text-red-400 font-bold">3格</span>，請謹慎使用。</li>
+                  <li>在「筆記本 - 角色檔案」右側頁面，可解鎖人物特徵。</li>
+                  <li>可在商店購買背包空間及證物深層線索。</li>
+                  <li>深層線索請在「筆記本 - 背包」中點擊查看。</li>
+                </ul>
+                <div className="h-2"></div>
+                <p className="text-amber-300 font-bold text-center text-base tracking-wide">
+                  搜索完成後，利用剩餘的時間，<br/>用筆記本整理你的思緒吧！
+                </p>
+              </div>
+              
+              <div className="px-6 py-4 border-t border-slate-800 bg-slate-900/50">
+                <button
+                  onClick={() => setShowTutorial(false)}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-colors shadow-lg shadow-indigo-900/50"
+                >
+                  確認
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 };

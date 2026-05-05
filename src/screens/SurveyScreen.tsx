@@ -12,6 +12,7 @@ interface SurveyScreenProps {
   currentSurvey: Record<number, number>;
   setCurrentSurvey: React.Dispatch<React.SetStateAction<Record<number, number>>>;
   submitSurvey: () => Promise<void> | void;
+  surveyCount: number;
 }
 
 export const SurveyScreen: React.FC<SurveyScreenProps> = ({
@@ -22,6 +23,7 @@ export const SurveyScreen: React.FC<SurveyScreenProps> = ({
   currentSurvey,
   setCurrentSurvey,
   submitSurvey,
+  surveyCount
 }) => {
   const allAnswered = SURVEY_SECTIONS.every(section =>
     section.questions.every(q => currentSurvey[q.id] !== undefined)
@@ -32,9 +34,12 @@ export const SurveyScreen: React.FC<SurveyScreenProps> = ({
       <div className="flex items-center justify-between sticky top-0 bg-slate-50/80 backdrop-blur-md py-4 z-10">
         <h2 className="text-3xl font-bold">表達能力自我評估</h2>
         <div className="flex items-center gap-4">
-          <button onClick={() => setPhase('lobby')} className="text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors">
-            跳過問卷
-          </button>
+          {/* 🌟 只有完成過 3 次以上的問卷(老玩家)才顯示跳過按鈕 */}
+          {surveyCount >= 3 && (
+            <button onClick={() => setPhase('lobby')} className="text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors">
+              跳過問卷
+            </button>
+          )}
           <button onClick={() => setShowHistory(!showHistory)} className="flex items-center gap-2 text-indigo-600 font-medium hover:underline">
             <History size={20} /> {showHistory ? '返回填寫' : '查看上次紀錄'}
           </button>
@@ -127,14 +132,24 @@ export const SurveyScreen: React.FC<SurveyScreenProps> = ({
                 !allAnswered && "opacity-50 cursor-not-allowed grayscale"
               )}
             >
-              {allAnswered ? '提交並進入教學' : '請完成所有題目'} <Send size={24} />
+              {allAnswered ? '提交問卷' : '請完成所有題目'} <Send size={24} />
             </button>
-            <button
-              onClick={() => setPhase('lobby')}
-              className="w-full py-4 text-slate-400 hover:text-slate-600 font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              跳過問卷直接開始 <ArrowRight size={18} />
-            </button>
+
+            {/* 🌟 根據是否為老玩家，決定顯示跳過按鈕還是鎖定提示 */}
+            {surveyCount >= 3 ? (
+              <button
+                onClick={() => setPhase('lobby')}
+                className="w-full py-4 text-slate-400 hover:text-slate-600 font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                跳過問卷直接開始 <ArrowRight size={18} />
+              </button>
+            ) : (
+              <div className="flex items-center justify-center px-4 py-3 bg-amber-50/80 rounded-xl border border-amber-200">
+                <span className="text-sm text-amber-600 font-bold">
+                  培訓期間，需完成本份問卷才能回到大廳喔！
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

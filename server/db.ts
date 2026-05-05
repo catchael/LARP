@@ -1,40 +1,46 @@
 // ═══════════════════════════════════════════════════════════
-// 資料庫初始化
+// 資料庫初始化（PostgreSQL）
+// 安裝：npm install pg && npm install --save-dev @types/pg
 // ═══════════════════════════════════════════════════════════
 
-// @ts-ignore - run: npm i --save-dev @types/better-sqlite3 to remove this
-import Database from "better-sqlite3";
+import { Pool } from "pg";
 
-const db = new Database("app.db");
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: false }
+    : false,
+});
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE,
-    last_played DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-  CREATE TABLE IF NOT EXISTS surveys (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    data TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  );
-  CREATE TABLE IF NOT EXISTS script_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    script_name TEXT,
-    dialogue TEXT, -- JSON array of { speaker, text }
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  );
-  CREATE TABLE IF NOT EXISTS assessment_reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    report_data TEXT, -- JSON object
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  );
-`);
+// 建立資料表（伺服器啟動時執行一次）
+export async function initDb() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id        SERIAL PRIMARY KEY,
+      email     TEXT UNIQUE,
+      last_played TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS surveys (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id),
+      data       TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS script_records (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER REFERENCES users(id),
+      script_name TEXT,
+      dialogue    TEXT,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS assessment_reports (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER REFERENCES users(id),
+      report_data TEXT,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  console.log("[DB] 資料表初始化完成");
+}
 
 export default db;

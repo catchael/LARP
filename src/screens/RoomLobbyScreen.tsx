@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, Clock, LogOut, Play, UserCircle, Users, Zap } from 'lucide-react';
+import { AlertTriangle, Clock, LogOut, Play, UserCircle, Users, Zap, Mic, MicOff } from 'lucide-react';
 import { AppPhase, RoomState, User, cn } from '../types';
 import { SCRIPTS } from '../data/scripts';
+import { ScriptCover } from '../components/ScriptCover';
 
 interface RoomLobbyScreenProps {
   roomState: RoomState | null;
@@ -12,6 +13,8 @@ interface RoomLobbyScreenProps {
   resetRoomState: () => void;
   setPhase: (p: AppPhase) => void;
   setCurrentCharacterIndex: (n: number) => void;
+  isMicOn: boolean;
+  toggleMic: () => void;
 }
 
 export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
@@ -22,6 +25,8 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   resetRoomState,
   setPhase,
   setCurrentCharacterIndex,
+  isMicOn,
+  toggleMic,
 }) => {
   if (!roomState || !previewScript) return null;
 
@@ -29,16 +34,17 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   const currentPlayers = roomState.users.length;
   const maxPlayers = previewScript.characters.length;
   const isFull = currentPlayers === maxPlayers;
-  const canStart = isFull;  // 🌟 人數湊齊就能開始
+  const canStart = isFull;
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-6xl w-full space-y-8">
+      {/* 上方標題與操作按鈕 */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter">遊戲準備大廳</h2>
           <p className="text-slate-400 font-bold">房間 ID: <span className="text-indigo-600">{roomState.id}</span></p>
         </div>
-        {/* 🌟 替換成這段：現在有解散與離開兩個按鈕了 */}
+        
         <div className="flex gap-4">
           {isHost && (
             <button
@@ -67,19 +73,15 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Room Info & Settings */}
+        {/* ================= 左側欄位：房間資訊與設定 ================= */}
         <div className="lg:col-span-1 space-y-6">
           <div className="glass p-8 rounded-[2.5rem] space-y-6">
-            <div className="aspect-video rounded-3xl overflow-hidden relative group">
-              <img
-                src={previewScript.image}
-                alt={previewScript.title}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent" />
+            <div className="aspect-[2/3] w-48 mx-auto rounded-lg overflow-hidden relative group shadow-xl">
+              <ScriptCover scriptId={roomState?.scriptId || previewScript?.id || 1} />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent pointer-events-none" />
+              {/* 如果封面已經有字了，這裡的 h3 可以考慮隱藏以防重疊，目前先保留 */}
               <div className="absolute bottom-6 left-6">
-                <h3 className="text-2xl font-bold text-white tracking-tight">{previewScript.title}</h3>
+                <h3 className="text-xl font-bold text-white tracking-tight">{previewScript.title}</h3>
               </div>
             </div>
 
@@ -164,37 +166,82 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Players & Characters */}
+        {/* ================= 右側欄位：玩家清單與角色列表 ================= */}
         <div className="lg:col-span-2 space-y-6">
           <div className="glass p-8 rounded-[2.5rem] min-h-[500px] flex flex-col">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">
                 {roomState.assignmentMethod === 'manual' ? '劇本中的角色' : '等待房主開始遊戲'}
               </h3>
-              <div className="flex -space-x-3">
-                {roomState.users.map((u, i) => (
-                  <div
-                    key={u.id}
-                    className="w-10 h-10 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center overflow-hidden shadow-sm"
-                    title={u.email}
-                  >
-                    <img src={u.avatar} alt="avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </div>
-                ))}
-              </div>
+              
+              {/* 🌟 移動到這裡：玩家頭像的正上方，視線最集中的地方 */}
+              <button
+                onClick={toggleMic}
+                className={cn(
+                  "px-6 py-3 rounded-2xl font-black text-base transition-all flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95",
+                  isMicOn
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/30 animate-pulse"
+                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/30"
+                )}
+              >
+                {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
+                <span className="hidden sm:inline">{isMicOn ? "收音中 (點擊關閉)" : "開啟麥克風聊天"}</span>
+              </button>
             </div>
 
+            {/* 玩家與角色頭像網格 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8 pb-8 border-b border-slate-100">
+              {roomState.users.map((roomUser) => {
+                const charData = previewScript.characters.find(c => c.name === roomUser.selectedCharacter);
+
+                return (
+                  <div key={roomUser.id} className="flex flex-col items-center gap-3">
+                    <div className="relative w-20 h-20 md:w-24 md:h-24">
+                      {/* 角色頭像圖片 */}
+                      <div className="w-full h-full rounded-2xl border-4 border-white shadow-lg overflow-hidden bg-slate-100">
+                        {roomUser.selectedCharacter ? (
+                          <img
+                            src={charData?.image || "/images/default-avatar.png"}
+                            alt={roomUser.selectedCharacter}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "/images/default-avatar.png";
+                            }}
+                          />
+                        ) : (
+                          <img src={roomUser.avatar} className="w-full h-full object-cover opacity-50" referrerPolicy="no-referrer" />
+                        )}
+                      </div>
+                      
+                      {/* 房主標記 */}
+                      {roomUser.isHost && (
+                        <span className="absolute -top-2 -right-2 bg-amber-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10">
+                          房主
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* 玩家名稱與角色稱號 */}
+                    <div className="text-center">
+                      <p className="font-bold text-slate-800 text-sm truncate w-24">
+                        {roomUser.name || roomUser.email.split('@')[0]} {/* 👈 優先顯示暱稱 */}
+                      </p>
+                      <p className="text-xs text-indigo-600 font-medium truncate w-24">
+                        {roomUser.selectedCharacter || '挑選角色中...'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 角色名片清單（供玩家點擊「查看詳情」） */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
               {previewScript.characters.map((char, idx) => {
-                // 大廳現在不顯示「誰選了誰」，因為還沒到選角階段
                 return (
                   <div
                     key={char.name}
-                    /* 徹底移除點擊選角 onClick */
-                    className={cn(
-                      "relative p-6 rounded-3xl border-2 transition-all group overflow-hidden",
-                      "border-slate-100 bg-white" 
-                    )}
+                    className="relative p-6 rounded-3xl border-2 border-slate-100 bg-white transition-all group overflow-hidden"
                   >
                     <div className="flex items-start justify-between relative z-10">
                       <div className="space-y-1">
@@ -214,10 +261,8 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
                       >
                         查看詳情
                       </button>
-                      {/* 這裡不再顯示「已選擇」標籤 */}
                     </div>
                     
-                    {/* 裝飾性圖示 */}
                     <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
                       <UserCircle size={120} />
                     </div>

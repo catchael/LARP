@@ -211,25 +211,25 @@ export const ACT_SCRIPT_2_ACT2: Act = {
   beats: buildBeats({
     narrations: NARRATIONS_SCRIPT2_ACT2,
     pauseAfterEach: false,
-    pauseLabel: (id) => (id === 'n7' ? '開始搜查' : '繼續'), // 假設 n7 是最後一段
+    pauseLabel: (id) => (id === 'n7' ? '閱讀死者日記' : '繼續'), // 假設 n7 是最後一段
     dialogueAfter: {
-      n1_2: [
+      n5: [
         {
           characterName: '朴警官', 
-          defaultLine: '嗨嗨',
-          prompt: '【請開麥發言】困惑地詢問另外兩人來這裡的目的，記住別洩漏自己的秘密。',
+          defaultLine: '都給我出來！手舉高！大半夜的躲在這邊做什麼！',
+          prompt: '【請開麥發言】請表現出警察的威勢，將附近的人都給嚇出來。',
           micFallbackDelay: 8000,
         },
         {
           characterName: '尹夫人',
-          defaultLine: 'holy',
-          prompt: '【請開麥發言】解釋自己為什麼要來這裡，想辦法在藏住目的的情況下證明自己是被邀請的。',
+          defaultLine: '啊！別開槍！我是聽到槍聲嚇到才躲起來的！',
+          prompt: '【請開麥發言】表現出自己的驚嚇跟恐慌，假裝自己也是聽到槍聲才躲起來。',
           micFallbackDelay: 8000,
         },
         {
           characterName: '老張',
-          defaultLine: 'heyheyhey',
-          prompt: '【請開麥發言】解釋自己為什麼要來這裡，記得假裝自己剛到，可以拿出證據。',
+          defaultLine: '長官別開槍！我是這裡的警衛，聽到聲音過來看看... 天啊！那是屍體嗎！',
+          prompt: '【請開麥發言】解釋自己在附近的原因，表現出驚嚇跟恐慌，這才發現有屍體。',
           micFallbackDelay: 8000,
         }
       ],

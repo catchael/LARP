@@ -8,6 +8,7 @@ interface GameEndingScreenProps {
   isKillerCaught: boolean;   // 遊戲結果：真兇是否被投出（被抓到）
   isHost?: boolean;          // 🌟 新增：是否為房主
   onNextPhase?: () => void;  // 🌟 修改：進入下一階段(真相大白)
+  surveyCount?: number;
 }
 
 export const GameEndingScreen: React.FC<GameEndingScreenProps> = ({

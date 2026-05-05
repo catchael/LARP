@@ -18,6 +18,7 @@ interface TruthScreenProps {
   meetingUsers?: MeetingUser[];
   isKillerCaught: boolean;
   scriptId: number;
+  surveyCount: number;
 }
 
 type DocumentType = 'story' | 'killer' | null;
@@ -49,6 +50,7 @@ export const TruthScreen: React.FC<TruthScreenProps> = ({
   meetingUsers = [],
   isKillerCaught,
   scriptId,
+  surveyCount,
 }) => {
   const [activeDoc, setActiveDoc] = useState<DocumentType>(null);
   const activeSpeakers = meetingUsers.filter(u => u.isMicOn);
@@ -193,16 +195,18 @@ export const TruthScreen: React.FC<TruthScreenProps> = ({
         </motion.div>
 
         {/* 離開房間 */}
-        <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2 }}
-          onClick={onLeaveRoom}
-          className={`mt-12 px-6 py-3 rounded-2xl backdrop-blur-sm border font-bold shadow-md transition-colors flex items-center gap-2 ${T.leaveBtn}`}
-        >
-          <LogOut size={18} />
-          離開房間
-        </motion.button>
+        <div className="mt-12 flex flex-col items-center gap-3">
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.2 }}
+            onClick={onLeaveRoom} // 直接呼叫離開函式
+            className={`mt-12 px-6 py-3 rounded-2xl backdrop-blur-sm border font-bold shadow-md transition-colors flex items-center gap-2 ${T.leaveBtn}`}
+          >
+            <LogOut size={18} />
+            離開房間
+          </motion.button>
+        </div>
       </motion.div>
 
       {/* ─── 文件閱讀 overlay ─── */}

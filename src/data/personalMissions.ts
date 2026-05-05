@@ -17,6 +17,9 @@ import {
   Crosshair,
   Sword,
   Notebook,
+  Flashlight,   // 新增：手電筒
+  CreditCard,   // 新增：VIP會員卡
+  Droplets,     // 新增：濕透的手帕
 } from 'lucide-react';
 import { Evidence } from '../gameData';
 
@@ -226,52 +229,27 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
     // ─── 尹夫人 ────────────────────────────────────────────
     '尹夫人': {
       mainTasks: [
-        '測',
-        '嫁禍給其他人。',
+        '絕對隱藏真兇身分跟姓名： 絕不能讓任何人知道是你開的槍！更不能暴露你對女婿和河女之間的病態嫉妒。',
       ],
+      hiddenTaskNote: '極度危險！你的生存關鍵！',
       hiddenTasks: [
-        '死守「搬器材」的謊言：如果你被逼問「為什麼要在深夜來這裡」，你必須咬死「崔製作人是口頭/傳訊息叫我來搬東西的」這個藉口。如果有人發現了你在 1 樓藏的筆電，你也要堅稱那不是你的私人物品！',
-        '合理解釋「地下室的菸蒂」與「洗手台的砂土」：這是你今晚最大的兩個破綻！如果有人搜出地下室角落那根屬於你的菸蒂，你必須臨場編造一個完美的謊言！總之，把水攪渾，把髒水全潑到別人身上，是你唯一的生路！',
+        '暗中拿捏朴警官： 那個警察收了你的黑錢，他現在跟你是一條繩上的蚱蜢。逼迫他在關鍵時刻幫你說話，或引導他去針對老張。',
       ],
       initialClues: [
         {
-          id: 'guard_initial_text_screenshot',
-          name: '西西',
-          brief: '偽造的對話訊息',
-          details: '只是一張你用電腦合成的對話，有著崔製作人請你搬器材的訊息。',
-          iconName: Smartphone,
+          id: 'madam_initial_vipcard',
+          name: '健身房的 VIP 會員卡',
+          brief: '一張頂級健身房的 VIP 會員卡',
+          details: '一張頂級健身房的 VIP 會員卡。',
+          iconName: CreditCard,
           ...OFFMAP,
         },
         {
-          id: 'guard_initial_cigarettes',
-          name: 'abc',
-          brief: '你最習慣抽的菸',
-          details: '某牌的廉價紙菸，是你最習慣抽的牌子。',
-          iconName: Cigarette,
-          ...OFFMAP,
-        },
-        {
-          id: 'guard_initial_lighter',
-          name: '打火機',
-          brief: '已經有些破碎的塑膠打火機',
-          details: '塑膠打火機，已經有些破碎。',
-          iconName: Flame,
-          ...OFFMAP,
-        },
-        {
-          id: 'guard_initial_keys',
-          name: '警衛室鑰匙',
-          brief: '電視台警衛室的鑰匙',
-          details: '電視台警衛室的鑰匙。',
-          iconName: Key,
-          ...OFFMAP,
-        },
-        {
-          id: 'guard_initial_props',
-          name: '拍攝道具',
-          brief: '偽裝成攝製組的道具',
-          details: '為了偽裝你是來拍攝的，所以你帶了一些拍攝道具。',
-          iconName: Camera,
+          id: 'madam_initial_handkerchief',
+          name: '手帕',
+          brief: '已經濕透的高級手帕',
+          details: '已經濕透。',
+          iconName: Droplets,
           ...OFFMAP,
         },
       ],
@@ -280,43 +258,35 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
     // ─── 老張 ────────────────────────────────────────────
     '老張': {
       mainTasks: [
-        '洗清自己的嫌疑：現場的所有證據都對你極度不利！你必須拼命證明自己「真的只是來撿破爛的」，並幫忙找出真正的兇手！',
+        '洗清自己的殺人嫌疑： 別人一定會死咬你身上的「抓痕、濕袖口、重泥沙」。',
       ],
-      hiddenTaskNote: '極度危險！你的生存關鍵！',
       hiddenTasks: [
-        '晚安',
+        '利用「雨傘」死死咬住尹夫人： 全場唯一知道尹夫人「帶傘出門」的人！當尹夫人試圖把髒水潑給你，或聲稱自己只是來晨跑避雨時，你必須當眾揭穿她的謊言！',
+        '質疑警察的失職： 身為警衛，你很清楚巡邏警察的路線。為什麼案發前後，這個生態公園附近完全沒有警察巡邏？'
       ],
       initialClues: [
         {
-          id: 'scavenger_initial_crowbar',
-          name: '什麼',
-          brief: '生鏽到快要斷掉的鐵撬',
-          details: '已經生鏽到快要斷掉。',
-          iconName: Hammer,
+          id: 'guard2_initial_keys',
+          name: '備用鑰匙',
+          brief: '社區警衛室的備用鑰匙',
+          details: '社區警衛室的備用鑰匙。',
+          iconName: Key,
           ...OFFMAP,
         },
         {
-          id: 'scavenger_initial_rope',
-          name: '一綑粗糙的尼龍繩',
-          brief: '綁廢棄物用的尼龍繩',
-          details: '綁廢棄物用。',
+          id: 'guard2_initial_necklace',
+          name: '金屬項鍊',
+          brief: '斷裂的金屬項鍊',
+          details: '從偷車賊身上扯下來的，已經斷了。',
           iconName: Cable,
           ...OFFMAP,
         },
         {
-          id: 'scavenger_initial_pipe',
-          name: '木製菸斗與菸草',
-          brief: '破舊的木製菸斗',
-          details: '破舊的木製菸斗與半袋劣質菸草。',
-          iconName: Cigarette,
-          ...OFFMAP,
-        },
-        {
-          id: 'scavenger_initial_newspaper',
-          name: '一張報紙',
-          brief: '被飛鏢射得千瘡百孔的舊報紙',
-          details: '被飛鏢射得千瘡百孔的報紙，上面是崔製作人的照片。',
-          iconName: Newspaper,
+          id: 'guard2_initial_flashlight',
+          name: '手電筒',
+          brief: '找路用的',
+          details: '找路用的手電筒。',
+          iconName: Flashlight,
           ...OFFMAP,
         },
       ],
@@ -325,42 +295,27 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
     // ─── 朴警官 ────────────────────────────────────────────
     '朴警官': {
       mainTasks: [
-        '查出殺死崔製作人的真兇：身為警察，你擁有主導審問的權威。你必須找出今晚殺害崔製作人的兇手！',
+        '查出開槍的真兇',
       ],
       hiddenTasks: [
-        '好耶',
+        '打死不認那支拋棄式手機： 一旦有人搜出那支寫著「清空警力」的手機，你必須展現出警察的威嚴拼死狡辯！',
+        '掌控局勢，見機行事'
       ],
       initialClues: [
         {
-          id: 'captain_initial_text_screenshot',
-          name: '挖喔',
-          brief: '崔製作人傳來的訊息',
-          details: '崔製作人要你今晚帶著那份「實體檢體」來新亭洞的地下室，並且要你提前將 DNA 檢測報告的副本轉交給他。',
-          iconName: Smartphone,
-          ...OFFMAP,
-        },
-        {
-          id: 'captain_initial_specimen',
-          name: '實驗檢體',
-          brief: '嫌犯的過期檢體',
-          details: '嫌犯的過期檢體，是你私下從證物庫裡偷出來的。',
-          iconName: FlaskConical,
-          ...OFFMAP,
-        },
-        {
-          id: 'captain_initial_report',
-          name: '檢體報告',
-          brief: '醫院出具的 DNA 檢體報告',
-          details: '醫院那邊拿到的檢體報告。',
-          iconName: FileText,
-          ...OFFMAP,
-        },
-        {
-          id: 'captain_initial_gun',
-          name: '一把槍跟手銬',
-          brief: '警察必需品',
-          details: '一把槍跟手銬，警察必需品。',
+          id: 'cop_initial_gun',
+          name: '警用制式手槍',
+          brief: '彈匣滿彈',
+          details: '彈匣滿彈。',
           iconName: Crosshair,
+          ...OFFMAP,
+        },
+        {
+          id: 'cop_initial_receipt',
+          name: '地下錢莊債務清償證明',
+          brief: '已經還清債務的證明',
+          details: '日期是幾天前就還清了，是尹夫人幫你還的。',
+          iconName: FileText,
           ...OFFMAP,
         },
       ],
@@ -369,44 +324,34 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
     // ─── 河總 ──────────────────────────────────────────
     '河總': {
       mainTasks: [
-        '找出殺害姊姊的真兇：那個十年前的連環殺人魔就在現場！仔細搜查現場的每一個角落，任何蛛絲馬跡都不能放過。',
+        '揪出殺害河女的真兇',
       ],
-      hiddenTaskNote: '絕對不能被發現',
       hiddenTasks: [
-        'okok',
+        '查明半年前的真相： 在盤問過程中，試探他們是否與半年前你公司遭遇的「商業陷害」有關。'
       ],
       initialClues: [
         {
-          id: 'assistant_initial_text_screenshot',
-          name: '好好好',
-          brief: '崔製作人傳給你的關鍵訊息',
-          details:
-            '崔製作人傳給你的訊息：「我找到十年前那個連環殺手了，也拿到了致命證據。今晚 11 點，你帶著隱藏式攝影機過來，守在暗處錄下的驗證證據的畫面。」',
+          id: 'ceo_initial_belongings',
+          name: '河女的手機與錢包',
+          brief: '死者的物品',
+          details: '死者的物品，是你想帶給她的。',
           iconName: Smartphone,
           ...OFFMAP,
         },
         {
-          id: 'assistant_initial_knife',
-          name: '折疊獵刀',
-          brief: '擦得雪亮的折疊獵刀',
-          details: '鋒利的折疊獵刀，被你擦得雪亮。',
-          iconName: Sword,
+          id: 'ceo_initial_flashlight',
+          name: '強光手電筒',
+          brief: '找路用的',
+          details: '找路用的。',
+          iconName: Flashlight,
           ...OFFMAP,
         },
         {
-          id: 'assistant_initial_camera',
-          name: '攝影機',
-          brief: '微型隱藏式攝影機',
-          details: '微型隱藏式攝影機，崔製作人交待要你錄下今晚的對話。',
-          iconName: Video,
-          ...OFFMAP,
-        },
-        {
-          id: 'assistant_initial_notebook',
-          name: '筆記本',
-          brief: '寫滿十年調查心血',
-          details: '寫滿你十年來追查連環殺人魔的調查心血。',
-          iconName: Notebook,
+          id: 'ceo_initial_note',
+          name: '揉皺的匯款明細單',
+          brief: '背面有記帳紀錄',
+          details: '上面寫著「老員工朴某欠款 500 萬，其子（警察）本月還款 3 萬」。',
+          iconName: FileText,
           ...OFFMAP,
         },
       ],

@@ -12,11 +12,12 @@ import http from "http";
 
 import apiRouter from "./server/routes.js";
 import { registerSocketHandlers } from "./server/socket.js";
+import { initDb } from "./server/db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
@@ -31,6 +32,9 @@ async function startServer() {
     });
 
     app.use(express.json());
+
+    // 初始化資料庫（建立資料表）
+    await initDb();
 
     // REST API（全部掛在 /api 前綴下）
     app.use("/api", apiRouter);
@@ -56,7 +60,7 @@ async function startServer() {
       });
     }
 
-    server.listen(PORT, "0.0.0.0", () => {
+    server.listen(Number(PORT), "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (err) {

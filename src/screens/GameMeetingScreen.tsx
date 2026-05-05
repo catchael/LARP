@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   BookOpen, MapPin, FileText, Search, ClipboardList, Clock, Users, Plus, Trash2, X,
-  CircleDot, Mic2, AlertTriangle, Tag, ChevronLeft, GripHorizontal, Pin, PinOff, Package
+  CircleDot, Mic2, AlertTriangle, Tag, ChevronUp, GripHorizontal, Pin, PinOff, Package
 } from 'lucide-react';
 import {
   Mic,
@@ -258,11 +258,24 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
   const [showTurnAlert, setShowTurnAlert] = useState(false);
   const [isHelperPanelOpen, setIsHelperPanelOpen] = useState(false);
   const [dismissedOrganizeAlert, setDismissedOrganizeAlert] = useState(false);
+  const [dismissedPreOrganizeAlert, setDismissedPreOrganizeAlert] = useState(false);
   const [dismissedFreeDiscussionAlert, setDismissedFreeDiscussionAlert] = useState(false);
+  const [showNotebookTutorial, setShowNotebookTutorial] = useState(false);
+
+  // 🌟 新增 2：只在玩家「第一次」進入會議室時觸發
+  useEffect(() => {
+    const hasSeen = localStorage.getItem('hasSeenMeetingTutorial');
+    if (!hasSeen) {
+      setShowNotebookTutorial(true);
+      localStorage.setItem('hasSeenMeetingTutorial', 'true'); // 標記為已看過
+    }
+  }, []);
+
   const [selectedEvidence, setSelectedEvidence] = useState<any | null>(null);
   // 🌟 會議室時間線的釘選功能
   const [pinnedChars, setPinnedChars] = useState<Set<number>>(new Set());
   const [pinScale, setPinScale] = useState<number>(1.5); // 1.5 ~ 2.0 玩家可調
+
   const togglePin = (idx: number) => {
     setPinnedChars(prev => {
       const next = new Set(prev);
@@ -317,26 +330,37 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
     if (meetingStage !== 'free_discussion') {
       setDismissedFreeDiscussionAlert(false);
     }
+    if (meetingStage !== 'pre_round_organizing') {
+      setDismissedPreOrganizeAlert(false);
+    }
   }, [meetingStage]);
 
+  // 🌟 修正：用 prevIsMyTurnRef 追蹤上一次的值，只在「false → true」邊緣才彈提醒
+  //    避免 server 每次推送 meeting_state 都讓 isMyTurn 重算，造成彈窗反覆出現
+  const prevIsMyTurnRef = useRef(false);
   useEffect(() => {
-    console.log('[TurnAlert] effect run, isMyTurn=', isMyTurn, 'currentSpeaker=', currentSpeaker?.email, 'me=', myMeetingUser?.email);
-    if (isMyTurn) {
-      console.log('[TurnAlert] -> 顯示彈窗，4 秒後自動關閉');
+    const prev = prevIsMyTurnRef.current;
+    prevIsMyTurnRef.current = isMyTurn;
+
+    if (isMyTurn && !prev) {
+      // 從「非我的回合」→「我的回合」，才觸發一次彈窗
       setShowTurnAlert(true);
-      const t = setTimeout(() => {
-        console.log('[TurnAlert] -> 4s timeout 觸發，關閉彈窗');
-        setShowTurnAlert(false);
-      }, 4000);
-      return () => {
-        console.log('[TurnAlert] cleanup: clearTimeout');
-        clearTimeout(t);
-      };
-    } else {
-      console.log('[TurnAlert] -> else 分支，強制關閉彈窗');
+      if (Number(roomState?.scriptId) === 2) {
+        setIsHelperPanelOpen(true);
+      }
+      const t = setTimeout(() => setShowTurnAlert(false), 4000);
+      return () => clearTimeout(t);
+    }
+    if (!isMyTurn) {
       setShowTurnAlert(false);
     }
-  }, [isMyTurn]);
+  }, [isMyTurn]); // 🌟 移除 roomState?.scriptId，scriptId 不影響輪次邊緣判定
+  // 🌟 新增：當進入「發言前準備」或「整理思緒」階段時，劇本二自動展開結構助手
+  useEffect(() => {
+    if ((meetingStage === 'pre_round_organizing' || meetingStage === 'organizing') && Number(roomState?.scriptId) === 2) {
+      setIsHelperPanelOpen(true);
+    }
+  }, [meetingStage, roomState?.scriptId]);
 
   return (
     <motion.div
@@ -411,7 +435,8 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-slate-200 truncate">{charData.name}</div>
                       <div className="text-xs text-slate-500 truncate flex items-center gap-1">
-                        {connectedUser ? connectedUser.email : 'AI 託管'}
+                        {/* 👇 優先顯示暱稱 */}
+                        {connectedUser ? (connectedUser.name || connectedUser.email.split('@')[0]) : 'AI 託管'}
                       </div>
                     </div>
                   )}
@@ -427,7 +452,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                         <span className="font-bold text-sm text-indigo-300">{charData.name}</span>
                         {isSpeaking && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />}
                       </div>
-                      <span className="text-slate-400">{connectedUser ? connectedUser.email : 'AI 託管'}</span>
+                      <span className="text-slate-400">{connectedUser ? (connectedUser.name || connectedUser.email.split('@')[0]) : 'AI 託管'}</span>
                     </div>
                   )}
                 </div>
@@ -444,14 +469,21 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
           isHelperPanelOpen ? "flex-[19]" : "flex-1"
         )}>
           
-          {/* 呼叫發言助手的懸浮按鈕 (只在右側面板關閉時顯示) */}
-          {!isHelperPanelOpen && (
+          {/* 呼叫發言助手的懸浮按鈕 (移至畫面正下方) */}
+          {!isHelperPanelOpen && Number(roomState?.scriptId) === 2 && (
             <button
               onClick={() => setIsHelperPanelOpen(true)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 bg-slate-800 hover:bg-indigo-600 border border-r-0 border-slate-600 text-slate-300 hover:text-white py-4 px-1 rounded-l-xl shadow-[-5px_0_15px_rgba(0,0,0,0.3)] z-[50] transition-all flex items-center justify-center group"
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 bg-slate-800 hover:bg-indigo-600 border border-b-0 border-slate-600 text-slate-300 hover:text-white py-1.5 px-6 rounded-t-xl shadow-[0_-5px_15px_rgba(0,0,0,0.3)] z-[50] transition-all flex items-center justify-center gap-2 group border-t-2 border-t-indigo-500"
               title="展開發言助手"
             >
-              <ChevronLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+              <ChevronUp size={20} className="group-hover:-translate-y-1 transition-transform" />
+              <span className="text-sm font-bold tracking-wider">展開發言助手</span>
+              
+              {/* 🌟 會呼吸的小亮點 */}
+              <span className="absolute right-2 top-2 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+              </span>
             </button>
           )}
 
@@ -493,7 +525,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                   <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full h-[650px] max-h-[75vh] min-h-0 overflow-hidden shadow-lg flex flex-col">
                     {/* 🌟 內容 A：時間線盤問 (深色大表格) */}
                     {meetingNotebookTab === 'timeline' && (
-                      <div className="flex-1 p-6 overflow-auto">
+                      <div className="flex-1 p-6 overflow-auto pb-[320px]">
                         <p className="text-slate-400 mb-4 text-sm flex items-center gap-2">
                           <Clock size={14} /> 此處顯示大家在搜查階段所記錄的時間線，可直接進行編輯或核對。
                         </p>
@@ -635,6 +667,10 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                               type: 'timeline',
                                               content: `[${time} ${charName}動向：${content}]`
                                             }));
+                                            // 🌟 加入這行！當玩家開始拖曳，且是劇本 2 時，自動展開助手面板
+                                            if (Number(roomState?.scriptId) === 2) {
+                                              setIsHelperPanelOpen(true);
+                                            }
                                           }}
                                           className="absolute top-4 right-4 opacity-0 group-hover/cell:opacity-100 cursor-grab active:cursor-grabbing text-slate-500 hover:text-indigo-400 p-1 bg-slate-800 rounded z-20 shadow-sm transition-opacity"
                                           title="按住拖曳此動向"
@@ -726,6 +762,10 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                       type: 'note',
                                       content: `[角色特徵]：這是關於 ${char.name} 的特徵資訊。` 
                                     }));
+                                    // 🌟 加入這行！當玩家開始拖曳，且是劇本 2 時，自動展開助手
+                                    if (Number(roomState?.scriptId) === 2) {
+                                      setIsHelperPanelOpen(true);
+                                    }
                                   }}
                                 >
                                   <CharacterTraitsPanel
@@ -763,7 +803,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                   </h4>
 
                                   {/* 🌟 筆記列表：分離特徵筆記(置頂)與一般筆記 (深色版) */}
-                                  <div className="space-y-3 mb-6 overflow-y-auto flex-1 pr-3 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                                  <div className="space-y-3 mb-6 overflow-y-auto flex-1 pr-3 pb-[320px] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                                     {(() => {
                                       const charNotes = characterNotes.filter(n => n.charIdx === selectedNotebookChar);
                                       const traitNotes = charNotes.filter(n => n.title.startsWith('[基礎特徵]') || n.title.startsWith('[進階特徵]'));
@@ -781,6 +821,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                                 draggable
                                                 onDragStart={(e) => {
                                                   e.dataTransfer.setData('application/json', JSON.stringify({ id: note.id, type: 'note', content: `[${note.title}]：${note.text}` }));
+                                                 if (Number(roomState?.scriptId) === 2) setIsHelperPanelOpen(true);
                                                 }}
                                                 className={cn("border rounded-xl shadow-sm overflow-hidden transition-all cursor-grab active:cursor-grabbing", isAdvanced ? "bg-amber-950/30 border-amber-800/50" : "bg-indigo-950/30 border-indigo-800/50")}
                                               >
@@ -809,7 +850,9 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                                 draggable
                                                 onDragStart={(e) => {
                                                   e.dataTransfer.setData('application/json', JSON.stringify({ id: note.id, type: 'note', content: `[${note.title || '筆記'}：${note.text}]` }));
+                                                  if (Number(roomState?.scriptId) === 2) setIsHelperPanelOpen(true);
                                                 }}
+                                                
                                                 className="bg-slate-800 border border-slate-600 rounded-xl shadow-sm overflow-hidden transition-all hover:border-indigo-500 cursor-grab active:cursor-grabbing"
                                               >
                                                 <button onClick={() => setExpandedNoteId(isExpanded ? null : note.id)} className="w-full flex justify-between items-center p-4 hover:bg-slate-700/80 transition-colors text-left">
@@ -832,6 +875,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                                 )}
                                               </div>
                                             );
+                                            
                                           })}
                                           {charNotes.length === 0 && (
                                             <div className="text-center text-slate-500 italic p-6 border-2 border-dashed border-slate-700 rounded-xl">
@@ -1029,12 +1073,17 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
               const myCharacter = previewScript?.characters[myCharacterIndex];
               
               if (myCharacter && myCharacter.timeline) {
-                dynamicInfoTexts.push({
-                  id: 'info_timeline',
-                  title: '我的初始時間線',
-                  content: myCharacter.timeline.map((t: any) => `【${t.time}】\n${t.event}`).join('\n\n'),
-                  type: 'personal'
+               // 🌟 將個人的初始時間線「拆分」成獨立區塊，方便單獨拖曳
+              if (myCharacter && myCharacter.timeline) {
+                myCharacter.timeline.forEach((t: any, idx: number) => {
+                  dynamicInfoTexts.push({
+                    id: `info_timeline_${idx}`,
+                    title: `【時間線】${t.time}`,
+                    content: t.event,
+                    type: 'personal'
+                  });
                 });
+              }
               }
 
               const currentList = dynamicInfoTexts.filter(t => t.type === infoSubTab);
@@ -1048,7 +1097,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                   <div className="flex bg-slate-800 rounded-2xl border border-slate-700 flex-1 min-h-[500px] overflow-hidden shadow-lg">
 
                     {/* 左側：列表清單 (暗色主題) */}
-                    <div className="w-1/3 p-6 border-r border-slate-700 overflow-y-auto bg-slate-800/80">
+                    <div className="w-1/3 p-6 border-r border-slate-700 overflow-y-auto bg-slate-800/80 pb-[320px]">
                       {/* 子分頁按鈕：個人 / 其他 */}
                       <div className="flex gap-2 mb-6 bg-slate-900 p-1 rounded-lg">
                         <button
@@ -1084,6 +1133,10 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                   type: 'text',
                                   content: `[文本資訊] ${item.title}：\n${plainTextContent}`
                                 }));
+                                // 🌟 加入這行！當玩家開始拖曳，且是劇本 2 時，自動展開助手面板
+                                if (Number(roomState?.scriptId) === 2) {
+                                      setIsHelperPanelOpen(true);
+                                }
                               }}
                               onClick={() => {
                                 setSelectedInfoId(item.id);
@@ -1148,7 +1201,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                 <div className="flex gap-6 flex-1 min-h-0">
                   
                   {/* 左側：證物網格 (加上 overflow-y-auto 獨立滾動) */}
-                  <div className="flex-1 overflow-y-auto pr-2 pb-8 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full">
+                  <div className="flex-1 overflow-y-auto pr-2 pb-[320px] [&::-webkit-scrollbar] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                     {backpack.length > 0 ? (
                       <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
                         {backpack.map((evidence: any, idx) => {
@@ -1167,8 +1220,20 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                   : "bg-slate-800/60 border-slate-700 hover:bg-slate-700/80 hover:border-slate-500"
                               )}
                             >
-                              {/* 移除原本上方獨立的灰色方塊，將圖示與文字完美整合 */}
-                              <div className="p-5 flex flex-col h-full">
+                              {/* 🌟 修正：把 draggable 放在這裡的內層 div 上！並且加上型別 React.DragEvent<HTMLDivElement> */}
+                              <div 
+                                draggable
+                                onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
+                                  e.dataTransfer.setData('application/json', JSON.stringify({
+                                    id: evidence.id,
+                                    type: 'clue',
+                                    content: `[線索] ${evidence.name}：${evidence.brief}`
+                                  }));
+                                  // 拖曳證物時自動打開助手
+                                  if (Number(roomState?.scriptId) === 2) setIsHelperPanelOpen(true);
+                                }}
+                                className="p-5 flex flex-col h-full cursor-grab active:cursor-grabbing"
+                              >
                                 <div className="flex items-start gap-3 mb-3">
                                   <div className={cn(
                                     "p-2.5 rounded-xl shrink-0 transition-colors", 
@@ -1260,12 +1325,13 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
             )}
             
             {meetingTab === 'tasks' && (() => {
-              // 🌟 1. 取得自己的角色名稱
+              // 🌟 1. 取得自己的角色名稱與當前劇本 ID
               const myUser = roomState?.users.find(u => u.email === user?.email);
               const characterName = myUser?.assignedCharacter || '';
+              const scriptId = Number(roomState?.scriptId) || 1;
               
-              // 🌟 2. 從 personalMissions.ts 取得專屬任務
-              const personalMission = (PERSONAL_MISSIONS as any)[characterName];
+              // 🌟 2. 從 personalMissions.ts 取得專屬任務 (先找劇本，再找角色)
+              const personalMission = (PERSONAL_MISSIONS as any)[scriptId]?.[characterName];
               
               // 若找不到則給予防呆預設值
               const mainTasks = personalMission?.mainTasks || ['找出真兇：還原案發當天的真相，並找出殺害死者的真正兇手。'];
@@ -1324,46 +1390,30 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
             })()}
           </div>
         </div>
-        {/* 🌟 Wrapper 強制 flex-[11] 比例，讓發言助手在打開時撐滿 11/30 的寬度
-            [&>*]:!w-full 確保內部 SpeechHelperPanel 填滿 wrapper 寬度 */}
-        <div className={cn(
-          "transition-all duration-300 flex overflow-hidden",
-          isHelperPanelOpen ? "flex-[11] min-w-[420px] [&>*]:!w-full" : "w-0"
-        )}>
-          <SpeechHelperPanel
-            isOpen={isHelperPanelOpen}
-            onClose={() => setIsHelperPanelOpen(false)}
-            onItemClick={handleHelperItemClick}
-          />
+      
+        
+          {/* 👇 加上劇本判斷，確保劇本一時不會渲染 */}
+          {Number(roomState?.scriptId) === 2 && (
+            <SpeechHelperPanel
+              isOpen={isHelperPanelOpen}
+              onClose={() => setIsHelperPanelOpen(false)}
+              onItemClick={handleHelperItemClick}
+              meetingStage={meetingStage as string} // 🌟 只要補上這行，紅線就會消失！
+            />
+          )}
+        
         </div>
-      </div>
+      
 
       {/* Bottom Subtitle & Mic Bar */}
-      <div className="h-24 bg-slate-950 border-t border-slate-800 flex items-center px-8 gap-6 shrink-0 relative">
+      {/* 🌟 加了 z-[70] 確保這整條儀表板永遠在最上層 */}
+      <div className="h-24 bg-slate-950 border-t border-slate-800 flex items-center px-8 gap-6 shrink-0 relative z-[70]">
 
-        {/* 🌟 替換這裡：讓輪流發言與自由討論共用這個膠囊計時器，並改變顏色與時間來源 */}
-        {(meetingStage === 'round_robin' || meetingStage === 'free_discussion') && (
-          <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 rounded-t-xl px-6 py-2 flex items-center gap-3 shadow-lg">
-            <Clock size={16} className={meetingStage === 'round_robin' ? "text-indigo-400" : "text-amber-400"} />
-            <span className="text-slate-300 font-medium">
-              {meetingStage === 'round_robin' ? '發言剩餘時間' : '自由討論時間'}
-            </span>
-            <span className={cn(
-              "text-xl font-mono font-bold",
-              meetingStage === 'round_robin' ? "text-white" : "text-amber-400"
-            )}>
-              {meetingStage === 'round_robin' 
-                ? `${Math.floor(turnTimeLeft / 60).toString().padStart(2, '0')}:${(turnTimeLeft % 60).toString().padStart(2, '0')}`
-                : `${Math.floor(timeLeft / 60).toString().padStart(2, '0')}:${(timeLeft % 60).toString().padStart(2, '0')}`
-              }
-            </span>
-          </div>
-        )}
-
-        {/* 🌟 修正 4：麥克風按鈕的禁用邏輯 (封麥階段鎖死) */}
+        {/* 1. 麥克風按鈕 */}
         {(() => {
           const isMicDisabled = 
             (meetingStage === 'round_robin' && currentSpeaker?.id !== socket?.id) || 
+            meetingStage === 'pre_round_organizing' || 
             meetingStage === 'organizing' || 
             meetingStage === 'voting_prompt';
           
@@ -1384,13 +1434,13 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
           );
         })()}
 
+        {/* 2. 字幕狀態條 */}
         <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl h-16 flex items-center overflow-hidden relative">
           <div
             className="absolute left-0 top-0 bottom-0 bg-emerald-900/30 transition-all duration-200 ease-out"
             style={{ width: `${currentVolume}%` }}
           />
           <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 z-10" />
-          {/* 將原本顯示字幕的行替換成以下狀態提示 */}
           <div className="text-slate-300 text-lg font-medium px-4 relative z-10 flex items-center gap-3">
             {isMicOn ? (
               <>
@@ -1403,6 +1453,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
           </div>
         </div>
 
+        {/* 3. 語速 (CPM) */}
         <div className="flex flex-col items-center justify-center bg-slate-800 border border-slate-700 rounded-xl px-4 h-16 min-w-[80px]">
           <div className="text-xs text-slate-400 font-medium mb-0.5">語速</div>
           <div className="text-emerald-400 font-mono font-bold flex items-baseline gap-1">
@@ -1410,7 +1461,26 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
           </div>
         </div>
 
-        {/* 🌟 修正 5：結束發言按鍵只在輪流階段出現 */}
+        {/* 🌟 4. 新的計時器位置：完美融入底部儀表板，絕對防遮擋！ */}
+        {['pre_round_organizing', 'round_robin', 'free_discussion'].includes(meetingStage) && (
+          <div className="flex flex-col items-center justify-center bg-slate-800 border border-slate-700 rounded-xl px-5 h-16 min-w-[110px] shadow-inner">
+            <div className="text-xs font-medium mb-1 flex items-center gap-1.5 text-slate-400">
+              <Clock size={12} className={meetingStage === 'round_robin' ? "text-indigo-400" : "text-amber-400"} />
+              {meetingStage === 'round_robin' ? '發言時間' : (meetingStage === 'pre_round_organizing' ? '準備時間' : '討論時間')}
+            </div>
+            <div className={cn(
+              "font-mono font-bold text-xl leading-none",
+              meetingStage === 'round_robin' ? "text-white" : "text-amber-400"
+            )}>
+              {meetingStage === 'round_robin' 
+                ? `${Math.floor(turnTimeLeft / 60).toString().padStart(2, '0')}:${(turnTimeLeft % 60).toString().padStart(2, '0')}`
+                : `${Math.floor(timeLeft / 60).toString().padStart(2, '0')}:${(timeLeft % 60).toString().padStart(2, '0')}`
+              }
+            </div>
+          </div>
+        )}
+
+        {/* 5. 結束發言按鍵 */}
         {meetingStage === 'round_robin' && currentSpeaker?.id === socket?.id && (
           <button
             onClick={() => {
@@ -1423,7 +1493,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
           </button>
         )}
 
-        {/* 🌟 修改 2：右下角的按鈕區塊，把倒數計時整合進「已就緒」按鈕中 */}
+        {/* 6. 右下角按鈕區塊 */}
         <div className="flex gap-4">
           {isHost && (
             <button
@@ -1438,7 +1508,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
             </button>
           )}
 
-          {(meetingStage === 'organizing' || meetingStage === 'free_discussion') && (
+          {['organizing', 'free_discussion', 'pre_round_organizing'].includes(meetingStage) && (
             <button
               disabled={isMeReady}
               onClick={() => socket?.emit('meeting_ready')}
@@ -1456,7 +1526,6 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                   <Clock size={18} className="animate-pulse text-emerald-200" />
                   <span>
                     我已就緒
-                    {/* 這裡把倒數計時用明顯的黑底包裝起來 */}
                     <span className="ml-2 font-mono bg-black/20 px-2 py-0.5 rounded text-lg tracking-wider">
                       {Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{(timeLeft % 60).toString().padStart(2, '0')}
                     </span>
@@ -1515,6 +1584,24 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
       </AnimatePresence>
 
       <AnimatePresence>
+        {/* 🌟 階段零：發言前準備時間 */}
+        {meetingStage === 'pre_round_organizing' && !dismissedPreOrganizeAlert && (
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+            <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-md shadow-2xl">
+              <h2 className="text-3xl font-black text-indigo-400 mb-4 tracking-widest text-shadow-sm">發言前準備</h2>
+              <p className="text-slate-300 text-lg mb-8 leading-relaxed">
+                即將開始輪流發言！<br/>請利用這段時間整理你的線索與時間線，並準備好你的說詞。<br/><br/>
+                <span className="text-emerald-400 font-bold">準備好後，請點擊右下角的「已就緒」。</span>
+              </p>
+              <button
+                onClick={() => setDismissedPreOrganizeAlert(true)}
+                className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-transform hover:scale-105 shadow-lg w-full"
+              >
+                開始準備
+              </button>
+            </div>
+          </motion.div>
+        )}
         {/* 階段一：整理思緒時間 */}
         {meetingStage === 'organizing' && !dismissedOrganizeAlert && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
@@ -1664,6 +1751,42 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
             ) : (
               <div className="text-2xl text-amber-500 font-bold animate-pulse">已送出意願，等待其他人完成選擇...</div>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🌟 新增：第一次進入會議室的「筆記本」教學提醒 */}
+      <AnimatePresence>
+        {showNotebookTutorial && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center"
+          >
+            <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-sm shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-emerald-500" />
+              
+              <div className="w-16 h-16 bg-indigo-900/50 rounded-full flex items-center justify-center mx-auto mb-6 border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                <BookOpen size={32} className="text-indigo-400" />
+              </div>
+              
+              <h2 className="text-2xl font-black text-white mb-4 tracking-widest text-shadow-sm">筆記本進階功能</h2>
+              
+              <p className="text-slate-300 text-base mb-8 leading-relaxed">
+                在左側的「筆記本」中，<br/>
+                可於<span className="text-indigo-400 font-bold mx-1">右上角切換</span>查看：<br/><br/>
+                🕒 <span className="text-emerald-400 font-bold tracking-wide">時間線盤問</span><br/>
+                👤 <span className="text-amber-400 font-bold tracking-wide">角色檔案與推理</span>
+              </p>
+              
+              <button
+                onClick={() => setShowNotebookTutorial(false)}
+                className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-transform hover:scale-105 shadow-lg w-full"
+              >
+                我知道了
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

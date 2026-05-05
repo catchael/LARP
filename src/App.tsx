@@ -4,6 +4,8 @@ import { UserCircle, AlertTriangle, LogOut, Check, CheckCircle, CheckCircle2, Mi
 import { User, Survey, AppPhase, TeachingModule, ScriptRecord, AssessmentReport, RoomState, cn } from './types';
 import { Evidence } from './gameData';
 import { io, Socket } from 'socket.io-client';
+import { useSubtitles } from './hooks/useSubtitles';
+import { useTranscript } from './hooks/useTranscript';
 
 // Data
 import { SCRIPTS } from './data/scripts';
@@ -32,6 +34,7 @@ import { TruthScreen } from './screens/TruthScreen';
 // 把原本的 TIE_ENDING_ID 改成 TIE_ENDING_IDS
 import { CHARACTER_TO_ENDING_ID, TRUE_KILLERS, TIE_ENDING_IDS } from './data/endingScripts';
 import { DiaryRevealScreen } from './screens/DiaryRevealScreen';
+import { AvatarSelectionScreen } from './screens/AvatarSelectionScreen';
 
 // Components
 import { ExitModal } from './components/ExitModal';
@@ -46,12 +49,13 @@ import { EvidenceModal } from './components/EvidenceModal';
 import { ShopModal } from './components/ShopModal';
 import { Mascot } from './components/Mascot';
 import { ReportPage } from './components/ReportModal';
-
+import SinglePlayerApp from './single-player/SinglePlayerApp';
 
 export default function App() {
   const scriptIdRef = useRef<number>(1);
   const [phase, setPhase] = useState<AppPhase>('login');
   // 🌟 新增：用來控制問卷彈窗的顯示，以及記住剛玩完的劇本名稱
+  const [isNewUser, setIsNewUser] = useState(false);
   const [showSurveyPrompt, setShowSurveyPrompt] = useState(false);
   const [lastPlayedScript, setLastPlayedScript] = useState('');
   const [user, setUser] = useState<User | null>(null);
@@ -110,10 +114,18 @@ export default function App() {
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
 
   const [isMicOn, setIsMicOn] = useState(false);
-  const [subtitles, setSubtitles] = useState<string[]>(['系統：歡迎來到會議室，請開始討論。']);
-  // 🌟 新增：跨輪次累積的完整字幕紀錄（不會在進入會議室時被清空）
-  const [allRoundsTranscript, setAllRoundsTranscript] = useState<{ round: number; line: string }[]>([]);
+
+  const subtitlesHook = useSubtitles(['系統：歡迎來到會議室，請開始討論。']);
+  const subtitles = subtitlesHook.displaySubtitles;   // 給 render 用，現有 subtitles 變數名不用改
+  const transcriptHook = useTranscript();
+  const allRoundsTranscript = transcriptHook.ordered; // 同上，render 不用改
   const currentRoundRef = useRef<number>(1);
+
+  // 計算是否解鎖第二劇本 (條件：玩過劇本一 且 填寫過問卷)
+  const hasPlayedScript1 = scriptRecords.some(r => r.script_name === SCRIPTS[0].title);
+  const hasPlayedScript2 = scriptRecords.some(r => r.script_name === SCRIPTS[1].title);
+  const hasFilledSurvey = surveys.length > 0;
+  const isScript2Unlocked = hasPlayedScript1 && hasFilledSurvey;
 
   const [currentVolume, setCurrentVolume] = useState(0);
   const [currentCPM, setCurrentCPM] = useState(0);
@@ -126,26 +138,19 @@ export default function App() {
     if (!savedUser) return;
     try {
       const parsed = JSON.parse(savedUser);
-      setUser(parsed);
-
-      // 🌟 新增：如果有未結束的房間紀錄，先離開 'login' phase，
-      //         避免 rejoin_room 還沒回來前畫面卡在登入畫面。
       const savedRoomId = localStorage.getItem(`larp_active_room_${parsed.email}`);
-      if (savedRoomId) {
-        setPhase('lobby'); // 占位用，等 room_state 回來會被覆蓋成正確 phase
-      } else {
-        setPhase('lobby'); // 已登入過的人直接進大廳，不用看登入畫面
-      }
 
-      fetch(`/api/surveys/${parsed.id}`)
-        .then(r => r.json())
-        .then(data => setSurveys(data.surveys || []));
-      fetch(`/api/records/${parsed.id}`)
-        .then(r => r.json())
-        .then(data => {
-          setScriptRecords(data.scripts || []);
-          setAssessmentReports(data.reports || []);
-        });
+      if (savedRoomId) {
+        // 🌟 情況 A：有未結束的房間，代表是斷線，執行自動重連
+        setUser(parsed);
+        setPhase(prev => prev === 'login' ? 'lobby' : prev);
+        fetchSurveys(parsed.id);
+        fetchRecords(parsed.id);
+      } else {
+        // 🌟 情況 B：正常結束遊戲，取消自動登入！
+        // 我們幫玩家把 Email 預先填入輸入框，省去重打的麻煩，但維持在登入畫面
+        setEmail(parsed.email);
+      }
     } catch {}
   }, []);
 
@@ -247,6 +252,9 @@ export default function App() {
 
       // 🌟 在錄音開始那瞬間就鎖定回合
       const lockedRound = currentRoundRef.current;
+      const lockedTimestamp = Date.now();
+      const lockedPhase: 'turn' | 'free' = 
+        (roomStateRef.current as any)?.meetingStage === 'free_discussion' ? 'free' : 'turn';
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) localChunks.push(e.data);
@@ -273,6 +281,8 @@ export default function App() {
         formData.append('character', myCharName);
         formData.append('scriptId', String(scriptId));
         formData.append('userId', String(user?.id));
+        formData.append('startTimestamp', String(lockedTimestamp));
+        formData.append('phase', lockedPhase);
 
         try {
           const res = await fetch('/api/process-voice-turn', {
@@ -282,14 +292,19 @@ export default function App() {
           const data = await res.json();
           console.log(`[STT] 收到回傳：${data.text?.length || 0} 字`);
           if (data.success && data.text) {
-            setSubtitles(prev => [...prev, data.text]);
+            subtitlesHook.appendFinal(data.text);
             dialogueRef.current.push({ speaker: myCharName, text: data.text });
-            appendToTranscript(data.text, lockedRound, true);
-
-            // 🌟 廣播自己的最終 ASR 給房間其他人
-            socket?.emit('final_transcript', { 
-              line: data.text, 
-              round: lockedRound 
+            transcriptHook.append({
+              round: lockedRound,
+              line: data.text,
+              startTimestamp: lockedTimestamp,
+              phase: lockedPhase,
+            });
+            socket?.emit('final_transcript', {
+              line: data.text,
+              round: lockedRound,
+              startTimestamp: lockedTimestamp,
+              phase: lockedPhase,
             });
           }
         } catch (e) {
@@ -310,44 +325,44 @@ export default function App() {
 
   // 🌟 修改：控制吉祥物「飛出來幾秒就回去」的廣播事件
   useEffect(() => {
-    // 只有在大廳才需要這些邏輯
-    if (phase !== 'lobby') {
-      window.dispatchEvent(new CustomEvent('mascot-alert', { detail: null }));
-      return;
-    }
-
-    if (analyzingState === 'analyzing') {
-      // 剛開始分析，飛到中央
-      window.dispatchEvent(new CustomEvent('mascot-alert', {
-        detail: { message: "分析報告正在生成中，等好了，鳥會提醒你啾！", isCentered: true }
-      }));
-      
-      // 4秒後飛回原本位置，並清空特殊訊息（恢復預設狀態）
-      const timer = setTimeout(() => {
+    if (phase === 'lobby') {
+      if (analyzingState === 'analyzing') {
         window.dispatchEvent(new CustomEvent('mascot-alert', {
-          detail: { message: "", isCentered: false } 
+          detail: { message: "分析報告正在生成中，等好了，鳥會提醒你啾！", isCentered: true }
         }));
-      }, 4000);
-      return () => clearTimeout(timer);
-      
-    } else if (analyzingState === 'ready') {
-      // 分析完成，再次飛到中央提醒
-      window.dispatchEvent(new CustomEvent('mascot-alert', {
-        detail: { message: `你的《${lastPlayedScript}》劇本分析出爐了！現在要看嗎~`, isCentered: true }
-      }));
-      
-      // 5秒後飛回原本位置，改成小提示
-      const timer = setTimeout(() => {
+        const timer = setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('mascot-alert', { detail: { message: "", isCentered: false } }));
+        }, 4000);
+        return () => clearTimeout(timer);
+      } else if (analyzingState === 'ready') {
         window.dispatchEvent(new CustomEvent('mascot-alert', {
-          detail: { message: "點擊下方的按鈕可以查看報告喔！", isCentered: false } 
+          detail: { message: `你的《${lastPlayedScript}》劇本分析出爐了！現在要看嗎~`, isCentered: true }
         }));
-      }, 5000);
-      return () => clearTimeout(timer);
-      
-    } else {
-      window.dispatchEvent(new CustomEvent('mascot-alert', { detail: null }));
+        const timer = setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('mascot-alert', { detail: { message: "點擊下方的按鈕可以查看報告喔！", isCentered: false } }));
+        }, 5000);
+        return () => clearTimeout(timer);
+      } else {
+        window.dispatchEvent(new CustomEvent('mascot-alert', { detail: null }));
+      }
+    } 
+    // 🌟 劇本大廳專屬吉祥物引導
+    else if (phase === 'script_lobby') {
+      if (!isScript2Unlocked) {
+        window.dispatchEvent(new CustomEvent('mascot-alert', {
+          detail: { message: "新手偵探，請先從《窒息地下室》開始調查啾！", isCentered: false }
+        }));
+      } else if (!hasPlayedScript2) { // 👈 加入還沒玩過劇本二的判斷
+        window.dispatchEvent(new CustomEvent('mascot-alert', {
+          detail: { message: "太棒了！《窒息地下室》已破案，快來挑戰下一個劇本啾！", isCentered: false }
+        }));
+      } else { // 👈 兩個都破案了！
+        window.dispatchEvent(new CustomEvent('mascot-alert', {
+          detail: { message: "恭喜大偵探！所有懸案都已偵破！快來試試專屬的單人挑戰吧啾！", isCentered: false }
+        }));
+      }
     }
-  }, [phase, analyzingState, lastPlayedScript]);
+  }, [phase, analyzingState, lastPlayedScript, isScript2Unlocked]);
 
   // 🌟 新增：把 currentRound 映射到 ref，方便在 setter callback 裡讀
   useEffect(() => {
@@ -364,7 +379,7 @@ export default function App() {
   // 🌟 新增：當進入會議階段時，強制清空之前演出或搜查殘留的 STT 字幕
   useEffect(() => {
     if (phase === 'game_meeting') {
-      setSubtitles(['系統：歡迎來到會議室，請開始討論。']);
+      subtitlesHook.reset(['系統：歡迎來到會議室，請開始討論。']);
     }
   }, [phase]);
 
@@ -403,8 +418,8 @@ export default function App() {
     setHasLoadedScriptTimeline(false);
     setTimelineEvents({});
     setCharacterNotes([]);
-    setSubtitles(['系統：歡迎來到會議室，請開始討論。']);
-    setAllRoundsTranscript([]);
+    subtitlesHook.reset(['系統：歡迎來到會議室，請開始討論。']);
+    transcriptHook.reset();
     setMeetingTab('clues');
     setIsNotebookOpen(false);
     setIsBackpackOpen(false);
@@ -442,14 +457,17 @@ export default function App() {
   };
 
   const handleActComplete = useCallback(() => {
-    // 🌟 結局走完 → 進入「真相大白」階段
-    if (currentActId.startsWith('ending_')) {
+    // 🌟 修正 1：改用 .includes('ending') 來捕捉所有包含 ending 的劇本 ID
+    if (currentActId.includes('ending')) {
       setIsActPlaying(false);
       setCurrentActId('');
-      setPhase('truth_revealed');
+      
+      // 🌟 修正 2：移除錯誤的 local state 設定，直接由房主觸發勝負結算
+      // (原本的 setPhase('truth_revealed') 是錯的，因為下一步其實是進入 game_ending)
       if (isHost) socket?.emit('start_ending_phase');
       return;
     }
+    
     setIsActPlaying(false);
     setCurrentActId('');
     socket?.emit('end_act');
@@ -626,9 +644,13 @@ export default function App() {
         if (state.phase === 'game_meeting') {
           setActiveSearchRoomId(null);
         }
-
-        // 🌟 Initiate WebRTC calls in any voice-enabled phase (角色預覽開始就能通話)
-        const VOICE_PHASES = ['character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed']; 
+      } else {
+        setIsGameStarted(false);
+        setPhase(state.phase);
+      }
+      
+      // 🌟 Initiate WebRTC calls in any voice-enabled phase (角色預覽開始就能通話)
+      const VOICE_PHASES = ['room_lobby', 'character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed']; 
         if (VOICE_PHASES.includes(state.phase) && newSocket) {
           state.meetingUsers?.forEach((u: any) => {
             if (u.id !== newSocket.id && !u.isAI && !peerConnections.current[u.id]) {
@@ -644,24 +666,22 @@ export default function App() {
             }
           });
         }
-      } else {
-        setIsGameStarted(false);
-        setPhase(state.phase);
-      }
     });
 
     newSocket.on('game_started', (data: { users: any[] }) => {
       const myUser = data.users.find(u => u.email === user.email);
       if (myUser) {
-        const script = previewScript || SCRIPTS[0];
+        // 🌟 修正 1：這裡也改用 scriptIdRef，確保抓到正確的劇本角色索引
+        const script = SCRIPTS.find(s => s.id === scriptIdRef.current) || SCRIPTS[0];
         const charIdx = script.characters.findIndex(c => c.name === myUser.assignedCharacter);
         if (charIdx >= 0) setCurrentCharacterIndex(charIdx);
       }
 
       setIsActPlaying(prev => {
         if (!prev) {
-          // 🌟 修改：根據當前房間的劇本 ID 決定序章 ID
-          const scriptId = Number(roomState?.scriptId) || 1;
+          // 🌟 修正 2：在 useEffect 閉包內，必須使用 scriptIdRef.current 才能拿到最新值！
+          // 這樣就不會永遠 fallback 到 1 了。
+          const scriptId = Number(scriptIdRef.current) || 1;
           setCurrentActId(`script${scriptId}_prologue`); 
           return true;
         }
@@ -940,12 +960,19 @@ export default function App() {
   }, [isNotebookOpen, roomState?.phase]);
 
   // 🌟 Always-on meeting_state：任何語音階段都要更新 meetingUsers (用於頭像麥克風圖示)
+  //    注意：強制關麥邏輯已在 game_meeting 專用 effect 處理，這裡只做狀態同步
   useEffect(() => {
     if (!socket) return;
 
     const onMeetingStateGlobal = (state: any) => {
       setMeetingUsers(state.users || []);
-      setCurrentSpeaker(state.currentSpeaker);
+      // 🌟 修正：只在 currentSpeaker 的 id 實際改變時才更新，
+      //    避免 server 每次推播都重算 isMyTurn → 反覆觸發發言提醒彈窗
+      setCurrentSpeaker(prev => {
+        const next = state.currentSpeaker ?? null;
+        if (prev?.id === next?.id) return prev;
+        return next;
+      });
       setTurnEndTime(state.turnEndTime);
 
       // Cleanup peer connections for users who left
@@ -979,9 +1006,18 @@ export default function App() {
         if (!state.isWarningActive) {
           setSilenceWarning({ active: false, countdown: 0 });
         }
-        // 只有在輪到別人時才強制關麥，輪到自己時不干涉
+        // 🌟 修正：強制關麥條件收緊
+        //    1. 必須是「輪到別人說話」(不是自己)
+        //    2. 且目前麥克風確實是開著的（避免冗餘的 setState）
+        //    用 setIsMicOn functional form，讀取最新值再決定要不要關
         if (state.currentSpeaker?.id !== socket.id) {
-          setIsMicOn(false);
+          setIsMicOn(prev => {
+            if (prev) {
+              socket.emit('toggle_mic', false);
+              return false;
+            }
+            return prev;
+          });
         }
       };
 
@@ -995,20 +1031,16 @@ export default function App() {
         setSilenceWarning({ active: false, countdown: 0 });
       };
 
-      const onSpeakingData = (data: { volume?: number, cpm?: number, subtitle?: string }) => {
+      const onSpeakingData = (data: { volume?: number; cpm?: number; subtitle?: string }) => {
         if (data.volume !== undefined) setCurrentVolume(data.volume);
         if (data.cpm !== undefined) setCurrentCPM(data.cpm);
         if (data.subtitle) {
-          setSubtitles(prev => {
-            const newArr = [...prev];
-            const speakerName = data.subtitle!.split('：')[0];
-            if (newArr.length > 0 && newArr[newArr.length - 1].startsWith(speakerName + '：')) {
-              newArr[newArr.length - 1] = data.subtitle!;
-            } else {
-              newArr.push(data.subtitle!);
-            }
-            return newArr.slice(-50);
-          });
+          const idx = data.subtitle.indexOf('：');
+          if (idx > 0) {
+            const speaker = data.subtitle.slice(0, idx);
+            const text = data.subtitle.slice(idx + 1);
+            subtitlesHook.updateLive(speaker, text);
+          }
         }
       };
 
@@ -1017,9 +1049,21 @@ export default function App() {
       socket.on('warning_cancelled', onWarningCancelled);
       socket.on('speaking_data', onSpeakingData);
 
-      const onFinalTranscript = (data: { line: string; round: number }) => {
-        console.log(`[final_transcript] 收到：${data.line.slice(0, 30)}... (round=${data.round})`);
-        appendToTranscript(data.line, data.round, true);   // 🌟 isFinal=true
+      const onFinalTranscript = (data: {
+        line: string;
+        round: number;
+        startTimestamp?: number;
+        phase?: 'turn' | 'free';
+      }) => {
+        console.log(`[final_transcript] 收到：${data.line.slice(0, 30)}...`);
+        transcriptHook.append({
+          round: data.round,
+          line: data.line,
+          startTimestamp: data.startTimestamp ?? Date.now(),
+          phase: data.phase ?? 'turn',
+        });
+        const speaker = data.line.split('：')[0];
+        if (speaker) subtitlesHook.clearLive(speaker);
       };
       socket.on('final_transcript', onFinalTranscript);
 
@@ -1034,40 +1078,7 @@ export default function App() {
   }, [phase, socket, user]);
 
   // 🌟 語音相關階段：角色預覽、個人檔案、搜證、搜證結束、會議室都可以開麥通話
-  const isVoicePhase = ['character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed'].includes(phase);
-
-  //    isFinal=false（預設）是即時字幕，同人同回合會覆蓋更新
-  const appendToTranscript = (line: string, forcedRound?: number, isFinal: boolean = false) => {
-    console.log(`[transcript] +1 line (round=${forcedRound ?? currentRoundRef.current}, isFinal=${isFinal}, ${line.length}字)`);
-    setAllRoundsTranscript(prev => {
-      const round = forcedRound ?? currentRoundRef.current;
-      const speakerName = line.split('：')[0];
-      const newArr = [...prev];
-
-      // 🌟 ASR 最終結果：永遠新增一筆，絕不覆蓋
-      if (isFinal) {
-        newArr.push({ round, line });
-        return newArr;
-      }
-
-      // 即時字幕路徑：保留原本的覆蓋邏輯
-      if (newArr.length > 0) {
-        const last = newArr[newArr.length - 1];
-        if (last.round === round && last.line.startsWith(speakerName + '：')) {
-          if (line.length < last.line.length - 5) {
-            newArr.push({ round, line });
-          } else {
-            newArr[newArr.length - 1] = { round, line };
-          }
-        } else {
-          newArr.push({ round, line });
-        }
-      } else {
-        newArr.push({ round, line });
-      }
-      return newArr;
-    });
-  };
+  const isVoicePhase = ['room_lobby', 'character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed'].includes(phase);
 
   // 🌟 離開所有語音階段時，關閉麥克風
   useEffect(() => {
@@ -1171,42 +1182,18 @@ export default function App() {
 
     let finalBuffer = '';
 
-    let isNewSentence = true; // 新增一個標記，用來追蹤是否該換行
-
     recognition.onresult = (event: any) => {
       let text = '';
       let isFinal = false;
-
-      // 只抓取最新的辨識結果，不使用無窮累加的 finalBuffer
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         text += event.results[i][0].transcript;
         if (event.results[i].isFinal) isFinal = true;
       }
-      
       text = text.trim();
       if (!text) return;
 
-      const newSubtitle = `${speakerCharacter}：${text}`;
-
-      setSubtitles(prev => {
-        const newArr = [...prev];
-        if (newArr.length > 0 && !isNewSentence) {
-          // 如果還是同一句話，覆蓋最後一行
-          newArr[newArr.length - 1] = newSubtitle;
-        } else {
-          // 如果是新的一句話，新增一行
-          newArr.push(newSubtitle);
-          isNewSentence = false; // 新增後立刻設為 false，後續的 interim 就會覆蓋這行
-        }
-        return newArr.slice(-50);
-      });
-
-      // 當這句話被系統判定為「結束（isFinal）」時，將標記設為 true，下次就會換行
-      if (isFinal) {
-        isNewSentence = true; 
-      }
-
-      socket.emit('speaking_data', { subtitle: newSubtitle });
+      subtitlesHook.updateLive(speakerCharacter, text);
+      socket.emit('speaking_data', { subtitle: `${speakerCharacter}：${text}` });
       socket.emit('user_speaking');
     };
 
@@ -1237,7 +1224,7 @@ export default function App() {
     if (!stream) return;
 
     const meetingStage = (roomState as any)?.meetingStage;
-    const isFreeMicPhase = ['character_preview', 'game_profile', 'game_search', 'search_end', 'truth_revealed'].includes(phase) || meetingStage === 'free_discussion';
+    const isFreeMicPhase = ['room_lobby','character_preview', 'game_profile', 'game_search', 'search_end', 'truth_revealed'].includes(phase) || meetingStage === 'free_discussion';
     const canSpeak = isFreeMicPhase || (socket && currentSpeaker?.id === socket.id);
 
     if (isMicOn && socket && canSpeak) {
@@ -1308,26 +1295,38 @@ export default function App() {
     if (meetingStage === 'organizing' || meetingStage === 'voting_prompt') return;
 
     // 🌟 修改：加入 free_discussion 的判斷
-    const isFreeMicPhase = ['character_preview', 'game_profile', 'game_search', 'search_end', 'truth_revealed'].includes(phase) || meetingStage === 'free_discussion';
+    const isFreeMicPhase = ['room_lobby', 'character_preview', 'game_profile', 'game_search', 'search_end', 'truth_revealed'].includes(phase) || meetingStage === 'free_discussion';
     const allowed = isFreeMicPhase || currentSpeaker?.id === socket.id;
     if (!allowed) return;
 
     if (!localStreamRef.current) {
       if (isMicRequestingRef.current) return; // ✅ 已經在請求中，不重複
       isMicRequestingRef.current = true;
-      navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      
+      // 🌟 建議加上 autoGainControl: true，聲音會比較大聲
+      navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
         .then(s => {
           localStreamRef.current = s;
-          s.getTracks().forEach(t => { t.enabled = false; });
+          
+          // 🌟 修正 1：既然是開啟麥克風，音軌必須是 true！
+          s.getTracks().forEach(t => { t.enabled = true; }); 
+          
           Object.values(peerConnections.current).forEach((pc: any) => {
             const track = s.getAudioTracks()[0];
-            const sender = pc.getSenders()[0];
+            const senders = pc.getSenders();
+            // 找出負責傳送 audio 的 sender
+            const sender = senders.find((s: any) => s.track?.kind === 'audio' || !s.track);
+            
+            // 🌟 修正 2：如果本來有 sender 就替換，如果連線是空的，就直接 addTrack 加入新軌道
             if (sender && track) {
-              sender.replaceTrack(track).catch((e: any) => console.warn(e));
+              sender.replaceTrack(track).catch((e: any) => console.warn("取代音軌失敗:", e));
+            } else if (track) {
+              pc.addTrack(track, s); 
             }
           });
+          
           setIsMicOn(true);
-          socket.emit('toggle_mic', true);
+          if (socket) socket.emit('toggle_mic', true);
         })
         .catch(err => console.error("Mic access denied:", err))
         .finally(() => { isMicRequestingRef.current = false; }); // ✅ 無論成功失敗都解鎖
@@ -1335,6 +1334,13 @@ export default function App() {
     }
 
     const newState = !isMicOn;
+    
+    // 🌟 關鍵修復：真正把麥克風的「硬體收音」切斷或打開！
+    const track = localStreamRef.current.getAudioTracks()[0];
+    if (track) {
+      track.enabled = newState; // true 就繼續收音，false 就實體靜音
+    }
+
     setIsMicOn(newState);
     socket.emit('toggle_mic', newState);
   };
@@ -1369,10 +1375,32 @@ export default function App() {
     });
     const data = await res.json();
     if (data.user) {
-      setUser(data.user);
-      localStorage.setItem('larp_user', JSON.stringify(data.user)); // 👈 加這行
+      // 🌟 1. 嘗試從瀏覽器紀錄找回這個玩家的舊頭貼和暱稱
+      const savedStr = localStorage.getItem('larp_user');
+      let existingAvatar = '';
+      let existingName = '';
+      if (savedStr) {
+        const saved = JSON.parse(savedStr);
+        // 確認信箱一致，才套用舊資料
+        if (saved.email === data.user.email) {
+          existingAvatar = saved.avatar || '';
+          existingName = saved.name || '';
+        }
+      }
+
+      // 🌟 2. 將舊資料與後端回傳的 user 合併
+      const finalUser = { ...data.user, avatar: existingAvatar, name: existingName };
+      setUser(finalUser);
+      localStorage.setItem('larp_user', JSON.stringify(finalUser));
       setSpeechRateHistory([]);
-      setPhase('intro');
+      
+      // 🌟 3. 判斷：如果是第一次登入 (沒有頭貼/暱稱)，才去選頭貼；老玩家直接進遊戲
+      if (existingAvatar && existingName) {
+        setPhase('intro'); 
+      } else {
+        setPhase('avatar_selection'); 
+      }
+      
       fetchSurveys(data.user.id);
       fetchRecords(data.user.id);
     }
@@ -1393,12 +1421,21 @@ export default function App() {
 
   const submitSurvey = async () => {
     if (!user) return;
+    
+    // 1. 儲存問卷到後端
     await fetch('/api/survey', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: user.id, data: currentSurvey })
     });
+    
+    // 2. 重新抓取問卷紀錄 (這會更新 surveys.length，解開彈窗的鎖)
     await fetchSurveys(user.id);
+
+    // 🌟 關鍵修復：清空作答紀錄，讓下一份問卷是白紙狀態
+    setCurrentSurvey({});
+
+    // 3. 填寫完畢，不論新老玩家，通通回到大廳繼續他們的流程
     setPhase('lobby');
   };
 
@@ -1452,9 +1489,11 @@ export default function App() {
 
   // 🌟 獨立的懸浮麥克風按鈕 — 出現在「準備好了，下一步」按鈕的左邊
   const renderFloatingMicButton = () => {
-    if (!isGameStarted) return null;
-    // 會議階段是輪流制，用自己的 UI，不重複顯示
+    if (!isGameStarted && phase !== 'room_lobby') return null; 
     if (phase === 'game_meeting') return null;
+
+    // 🌟 大廳的麥克風改由 RoomLobbyScreen 獨立渲染一個更明顯的，所以這裡隱藏
+    if (phase === 'room_lobby') return null;
 
     const isFreeMicPhase = ['character_preview', 'search_end'].includes(phase);
     if (!isFreeMicPhase) return null;
@@ -1509,8 +1548,9 @@ export default function App() {
   };
 
   const renderBottomRightControls = () => {
-    if (!isGameStarted) return null;
-    const allowedPhases = ['character_preview', 'game_profile', 'game_search', 'search_end'];
+    // 🌟 給大廳特權：即使遊戲還沒開始，大廳也可以顯示底部控制區
+    if (!isGameStarted && phase !== 'room_lobby') return null; 
+    const allowedPhases = ['room_lobby', 'character_preview', 'game_profile', 'game_search', 'search_end'];
     if (!allowedPhases.includes(phase)) return null;
 
     return (
@@ -1522,17 +1562,30 @@ export default function App() {
   };
 
   // 👇 新增這個：專屬於個人檔案與任務發放的底部計時器
+  // 👇 更新這個專屬於個人檔案、任務發放與日記的計時器[cite: 3]
+  // 👇 更新這個專屬於個人檔案、任務發放與日記的計時器
   const renderPhaseTimer = () => {
     if (!isGameStarted) return null;
     
-    // 只有「秘密檔案」與「任務發放」這兩個階段顯示這個計時器
-    if (!['game_profile', 'mission_briefing'].includes(phase)) return null;
+    // 只有這三個階段顯示這個計時器
+    if (!['game_profile', 'mission_briefing', 'diary_reveal'].includes(phase)) return null;
+
+    // 🌟 判斷當前是否為日記階段
+    const isDiaryPhase = phase === 'diary_reveal';
 
     return (
       <motion.div 
+        // 🌟 動畫：因為都在下方了，統一設定為從下方浮現 (y: 50 -> 0)
         initial={{ y: 50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-slate-950/95 border border-slate-700/60 px-7 py-3 rounded-full shadow-[0_8px_40px_rgba(0,0,0,0.7)] backdrop-blur-md flex items-center gap-3"
+        className={cn(
+          "fixed z-[200] bg-slate-950/95 border border-slate-700/60 px-7 py-3 rounded-full shadow-[0_8px_40px_rgba(0,0,0,0.7)] backdrop-blur-md flex items-center gap-3",
+          // 🌟 核心修改：如果是日記，就定位在左下角 (bottom-8 left-8)
+          // 否則維持原本的正下方居中 (bottom-8 left-1/2 -translate-x-1/2)
+          isDiaryPhase 
+            ? "bottom-8 left-8" 
+            : "bottom-8 left-1/2 -translate-x-1/2"
+        )}
       >
         <Clock
           className={timeLeft <= 30 ? 'text-red-500 animate-pulse' : 'text-indigo-400'}
@@ -1672,15 +1725,48 @@ export default function App() {
       "min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-1000",
       isGameStarted ? "bg-slate-950 text-slate-200" : "bg-gradient-to-br from-slate-50 to-indigo-50"
     )}>
-      {/* Persistent Header Icon */}
+      {/* Persistent Header Icon — 顯示玩家選擇的自訂頭貼與下拉選單 */}
       {user && (
-        <div className="fixed top-6 right-6 z-40">
+        <div className="fixed top-6 right-6 z-40 group flex flex-col items-end">
+          {/* 主按鈕：維持原本點擊打開個人紀錄的功能 */}
           <button
             onClick={() => setShowRecordsPanel(true)}
-            className="p-3 bg-white rounded-2xl shadow-lg border border-slate-100 text-indigo-600 hover:scale-110 transition-transform active:scale-95"
+            className="relative w-14 h-14 bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden group-hover:scale-105 transition-transform active:scale-95 flex items-center justify-center z-10"
           >
-            <UserCircle size={28} />
+            {user.avatar ? (
+              <img 
+                src={user.avatar} 
+                alt="個人紀錄" 
+                className="w-full h-full object-cover bg-slate-50"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <UserCircle size={28} className="text-indigo-600" />
+            )}
+            
+            {/* 懸浮提示文字 */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <ClipboardList size={20} className="text-white" />
+            </div>
           </button>
+
+          {/* 🌟 新增：下拉選單 (滑鼠 hover 時優雅滑出) */}
+          <div className="absolute top-14 right-0 pt-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-0">
+            <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 p-2 flex flex-col w-40">
+              {/* 顯示目前暱稱 */}
+              <div className="px-3 py-2 text-xs font-bold text-slate-400 border-b border-slate-100 mb-1 truncate text-center">
+                {user.name || user.email.split('@')[0]}
+              </div>
+              
+              {/* 重選頭貼與暱稱按鈕 */}
+              <button 
+                onClick={() => setPhase('avatar_selection')}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors w-full"
+              >
+                <UserCircle size={16} /> 修改個人資料
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1693,8 +1779,34 @@ export default function App() {
             handleLogin={handleLogin}
           />
         )}
+        {(phase as any) === 'avatar_selection' && (
+          <AvatarSelectionScreen 
+            key="avatar_selection"
+            initialName={user?.name || ''}
+            onConfirm={(url, playerName) => {
+              let oldUser = false;
+              
+              if (user) {
+                oldUser = !!(user.avatar && user.name); // 判斷是不是老玩家
+                
+                const finalName = playerName.trim() || user.email.split('@')[0];
+                const updatedUser = { ...user, avatar: url, name: finalName };
+                setUser(updatedUser);
+                localStorage.setItem('larp_user', JSON.stringify(updatedUser));
+              }
+              
+              // 🌟 修正跳轉邏輯：分流處理
+              if (oldUser) {
+                setPhase('lobby'); // 老玩家修改完，直接順暢地回到大廳
+              } else {
+                setIsNewUser(true); // 標記為新手
+                setPhase('intro');  // 帶去看蜜桃鳥的新手 5 步驟教學
+              }
+            }} 
+          />
+        )}
         {phase === 'intro' && (
-          <IntroScreen key="intro" setPhase={setPhase} />
+          <IntroScreen key="intro" setPhase={setPhase} isNewUser={isNewUser} />
         )}
         {phase === 'survey' && (
           <SurveyScreen
@@ -1706,6 +1818,7 @@ export default function App() {
             currentSurvey={currentSurvey}
             setCurrentSurvey={setCurrentSurvey}
             submitSurvey={submitSurvey}
+            surveyCount={surveys.length}
           />
         )}
         {phase === 'lobby' && (
@@ -1776,6 +1889,8 @@ export default function App() {
             key="script_lobby"
             setPhase={setPhase}
             setPreviewScript={setPreviewScript}
+            isScript2Unlocked={isScript2Unlocked}
+            hasPlayedScript2={hasPlayedScript2}
           />
         )}
         {phase === 'script_detail' && (
@@ -1803,6 +1918,8 @@ export default function App() {
             resetRoomState={resetRoomState}
             setPhase={setPhase}
             setCurrentCharacterIndex={setCurrentCharacterIndex}
+            isMicOn={isMicOn}         // 🌟 新增：傳入麥克風狀態
+            toggleMic={toggleMic}     // 🌟 新增：傳入切換函式
           />
         )}
         {phase === 'character_preview' && (
@@ -1983,6 +2100,7 @@ export default function App() {
             // 房主點擊後，通知所有人進入最後的真相大白
             if (isHost) socket?.emit('start_truth_phase');
           }}
+          surveyCount={surveys.length}
         />
       )}
 
@@ -1995,52 +2113,23 @@ export default function App() {
 
             const myCharacterName = me?.assignedCharacter ?? '';
 
-            // 🌟 1. 把跨輪次 transcript 按輪次分組
-            const round1 = allRoundsTranscript.filter(t => t.round === 1).map(t => t.line);
-            const round2 = allRoundsTranscript.filter(t => t.round === 2).map(t => t.line);
-
-            // 🌟 2. 打包成完整對話紀錄（給 save-dialogue 用，修正為資料庫預期的 {speaker, text} 格式）
+            // 1. 給 save-dialogue 用 — 含 free + turn，所有人，按時間排序
             const packagedDialogue: { speaker: string; text: string }[] = [];
-            
-            if (round1.length > 0) {
-              packagedDialogue.push({ speaker: '系統', text: '【第一輪討論】' });
-              round1.forEach(line => {
-                const splitIdx = line.indexOf('：');
-                if (splitIdx > -1) {
-                  packagedDialogue.push({ speaker: line.slice(0, splitIdx), text: line.slice(splitIdx + 1).trim() });
-                }
-              });
-            }
-            if (round2.length > 0) {
-              packagedDialogue.push({ speaker: '系統', text: '【第二輪討論】' });
-              round2.forEach(line => {
-                const splitIdx = line.indexOf('：');
-                if (splitIdx > -1) {
-                  packagedDialogue.push({ speaker: line.slice(0, splitIdx), text: line.slice(splitIdx + 1).trim() });
-                }
-              });
+            for (const round of [1, 2] as const) {
+              const lines = transcriptHook.fullDialogueByRound(round);
+              if (lines.length > 0) {
+                packagedDialogue.push({ speaker: '系統', text: `【第${round === 1 ? '一' : '二'}輪討論】` });
+                packagedDialogue.push(...lines);
+              }
             }
 
-            // 🌟 3. 只抽自己的發言，以「輪次」為單位合併成一整段（給 analyse 用）
-            const extractMyText = (line: string) =>
-              line.startsWith(`${myCharacterName}：`)
-                ? line.split('：').slice(1).join('：').trim()
-                : null;
-
+            // 2. 給 /analyse 用 — 只取 turn 階段、只取自己
             const myTurns: string[] = [];
-
-            const round1MyLines = round1
-              .map(extractMyText)
-              .filter((t): t is string => !!t);
-            if (round1MyLines.length > 0) {
-              myTurns.push(`[第一輪]\n${round1MyLines.join('\n')}`);
-            }
-
-            const round2MyLines = round2
-              .map(extractMyText)
-              .filter((t): t is string => !!t);
-            if (round2MyLines.length > 0) {
-              myTurns.push(`[第二輪]\n${round2MyLines.join('\n')}`);
+            for (const round of [1, 2]) {
+              const myLines = transcriptHook.turnsByRoundForCharacter(round, myCharacterName);
+              if (myLines.length > 0) {
+                myTurns.push(`[第${round === 1 ? '一' : '二'}輪]\n${myLines.join('\n')}`);
+              }
             }
 
             // 🌟 4. 玩到結局才送分析（這個 onLeaveRoom 只在 truth_revealed 觸發，本身就是條件）
@@ -2107,7 +2196,30 @@ export default function App() {
           meetingUsers={meetingUsers}
           isKillerCaught={isKillerCaught}
           scriptId={roomState?.scriptId ?? 1}
+          surveyCount={surveys.length}
         />
+      )}
+
+      {/* 新增的單人劇本體驗畫面 */}
+      {phase === 'single_player' && (
+        <motion.div
+          key="single_player"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[200] bg-slate-50 overflow-y-auto"
+        >
+          {/* 返回按鈕：懸浮在左上角，讓使用者隨時能離開單人劇本 */}
+          <button
+            onClick={() => setPhase('script_lobby')}
+            className="fixed top-6 left-6 z-[300] px-5 py-2.5 bg-white/80 backdrop-blur-md border border-slate-200 rounded-xl shadow-lg font-bold text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-2"
+          >
+            返回劇本大廳
+          </button>
+
+          {/* 載入獨立的單人劇本 App 元件 */}
+          <SinglePlayerApp />
+        </motion.div>
       )}
 
       {phase === 'mission_briefing' && notebookModalNode}
@@ -2230,7 +2342,7 @@ export default function App() {
       </AnimatePresence>
 
       {['room_lobby', 'character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting'].includes(phase) && renderUserPresenceBar()}
-      {['character_preview', 'game_profile', 'game_search', 'search_end'].includes(phase) && renderBottomRightControls()}
+      {['room_lobby', 'character_preview', 'game_profile', 'game_search', 'search_end'].includes(phase) && renderBottomRightControls()}
 
       {renderPhaseTimer()}
 
@@ -2345,9 +2457,22 @@ export default function App() {
                       setShowSurveyPrompt(false);
                       setPhase('lobby'); // 🌟 婉拒填寫，回大廳
                     }}
-                    className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-xl font-medium transition-colors"
+                    // 🌟 核心修改：判斷問卷數量是否達到 3 份 (代表完整完成一次流程)
+                    disabled={surveys.length < 3} 
+                    className={cn(
+                      "w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2",
+                      surveys.length < 3
+                        ? "bg-slate-800/50 text-slate-500 cursor-not-allowed border border-slate-700/50" // 🔒 鎖定樣式
+                        : "bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors" // 🔓 解鎖樣式
+                    )}
                   >
-                    稍後再說，先回大廳
+                    {surveys.length < 3 ? (
+                      <>
+                        <span className="opacity-60 text-xs">🔒 培訓期間，需完成問卷才能回大廳</span>
+                      </>
+                    ) : (
+                      "稍後再說，先回大廳"
+                    )}
                   </button>
                 </div>
               </div>
