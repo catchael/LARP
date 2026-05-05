@@ -671,32 +671,17 @@ export function registerSocketHandlers(io: Server) {
           room.users.forEach(u => {
             if (!assignments[u.id]) assignments[u.id] = availableChars.pop()!;
           });
-
-          // 🌟 3. 就在這裡！在正式開始放入玩家前，先把大廳時期的暫存名單清空
-          room.meetingUsers = []; 
-
-          room.users.forEach(u => {
-            u.assignedCharacter = assignments[u.id];
-            room.meetingUsers.push({
-              id: u.id,
-              email: u.email,
-              name: u.name,
-              avatar: u.avatar,
-              character: assignments[u.id],
-              isMicOn: false,
-              lastSpokeTime: Date.now(),
-              isAI: false,
-            });
-          });
         }
 
+        // 🌟 修正：清空並統一 push 一次（random 和 manual 共用），避免重複 push 造成每人兩筆
+        room.meetingUsers = [];
         room.users.forEach(u => {
           u.assignedCharacter = assignments[u.id];
           room.meetingUsers.push({
             id: u.id,
             email: u.email,
             name: u.name,
-            avatar: u.avatar, // 👈 這裡就不會再報錯了！因為我們在步驟 1 已經加了型別
+            avatar: u.avatar,
             character: assignments[u.id],
             isMicOn: false,
             lastSpokeTime: Date.now(),
@@ -704,6 +689,7 @@ export function registerSocketHandlers(io: Server) {
           });
         });
 
+        // 剩餘角色由 AI 託管
         availableChars.forEach(char => {
           room.meetingUsers.push({
             id: `ai_${char}`,
