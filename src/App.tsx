@@ -369,10 +369,12 @@ export default function App() {
     currentRoundRef.current = (roomState as any)?.currentRound ?? 1;
   }, [roomState]);
 
-  // 🌟 每次進入搜查階段時清空當前背包（跨回合累計紀錄保留在 allCollectedEvidence）
+  // 🌟 每次進入搜查階段時清空當前背包、已撿金幣、已解鎖進階特徵
   useEffect(() => {
     if (phase === 'game_search') {
       setBackpack([]);
+      setCollectedCoins([]);           // 金幣每回合刷新
+      setUnlockedAdvancedDetails([]);  // 進階特徵每回合可重新解鎖
     }
   }, [phase]);
 
