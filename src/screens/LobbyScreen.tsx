@@ -12,7 +12,7 @@ interface LobbyScreenProps {
 }
 
 export const LobbyScreen: React.FC<LobbyScreenProps> = ({ setPhase, setActiveModule, setCurrentPage }) => {
-  const [showHeadphoneAlert, setShowHeadphoneAlert] = useState(true);
+  const [showHeadphoneAlert, setShowHeadphoneAlert] = useState(() => !localStorage.getItem('larp_headphone_ok'));
   return (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-5xl w-full space-y-12">
     <div className="flex items-end justify-between">
@@ -75,7 +75,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ setPhase, setActiveMod
             </p>
           </div>
           <button
-            onClick={() => setShowHeadphoneAlert(false)}
+            onClick={() => {
+            localStorage.setItem('larp_headphone_ok', '1');
+            setShowHeadphoneAlert(false);
+          }}
             className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-white font-bold rounded-2xl transition-colors shadow-lg shadow-amber-200"
           >
             我已佩戴耳機，繼續
