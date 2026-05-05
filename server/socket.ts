@@ -1246,8 +1246,7 @@ export function registerSocketHandlers(io: Server) {
 
       let user = room.meetingUsers.find(u => u.id === socket.id);
 
-      // 🌟 修正：自由開麥階段找不到 meetingUser 時，從 room.users 補建一筆臨時 entry
-      //    避免頭像列的麥克風圖示無法反映狀態
+      // 🌟 修正：自由開麥階段找不到 meetingUser 時，從 room.users 補建一筆
       if (!user && isFreeMicPhase) {
         const roomUser = room.users.find(u => u.id === socket.id);
         if (roomUser) {
