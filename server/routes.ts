@@ -248,36 +248,12 @@ router.post("/process-voice-turn", upload.single("audio"), async (req, res) => {
 
     if (!rawText.trim()) return res.json({ success: true, text: "" });
 
-    // 🌟 Whisper 幻覺過濾：靜音/噪音時 Whisper 會產生固定的填充文字，直接丟棄
-    const WHISPER_HALLUCINATION = [
-      '字幕', 'amara', '訂閱', '翻譯', 'mbc', 'kbs', 'sbs', 'tvn',
-      '請按讚', '請分享', '敬請期待', '廣告', 'thanks for watching',
-      'subtitle', 'subtitles', 'closed caption',
-    ];
-
-    // 🌟 語言偵測：計算日文（hiragana/katakana）和韓文字元比例
-    //    Whisper 在靜音或環境噪音時常幻覺出假日文/韓文
-    const countChars = (text: string, regex: RegExp) =>
-      (text.match(regex) ?? []).length;
-    const totalChars = rawText.replace(/\s/g, '').length || 1;
-    const japaneseCount = countChars(rawText, /[぀-ゟ゠-ヿ]/g); // hiragana + katakana
-    const koreanCount   = countChars(rawText, /[가-힯ᄀ-ᇿ]/g); // hangul
-    const foreignRatio  = (japaneseCount + koreanCount) / totalChars;
-
-    const rawLower = rawText.toLowerCase();
-    const isHallucination =
-      WHISPER_HALLUCINATION.some(w => rawLower.includes(w)) ||
-      rawText.trim().length < 2 ||
-      /^[\s\S]*$/.test('') ||                             // placeholder
-      /^[，。！？、…\s]+$/.test(rawText.trim()) ||        // 純標點
-      foreignRatio > 0.3;                                 // 超過 30% 是日/韓文字元
-
-    if (isHallucination) {
-      console.warn(`[STT] 偵測到 Whisper 幻覺輸出（日韓比例 ${Math.round(foreignRatio*100)}%），已丟棄：「${rawText}」`);
+    // Deepgram 不需要幻覺過濾，只過濾純標點或空白的無效回傳
+    if (/^[，。！？、…\s]+$/.test(rawText.trim())) {
       return res.json({ success: true, text: "" });
     }
 
-    let correctedText = rawText;
+        let correctedText = rawText;
     try {
       correctedText = await correctTermsWithLlama(rawText, script);
     } catch (llmErr: any) {
