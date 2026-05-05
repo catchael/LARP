@@ -388,7 +388,6 @@ export default function App() {
   }, [phase]);
 
   // 🌟 進入封麥階段（整理思緒、投票）時，強制關掉已開啟的麥克風
-  //    避免玩家在 search_end 開麥後進會議室，整理思緒階段仍顯示為開麥狀態
   useEffect(() => {
     const meetingStage = (roomState as any)?.meetingStage;
     const isSealedStage = meetingStage === 'organizing' || meetingStage === 'pre_round_organizing' || meetingStage === 'voting_prompt';
@@ -397,6 +396,75 @@ export default function App() {
       socket?.emit('toggle_mic', false);
     }
   }, [(roomState as any)?.meetingStage]);
+
+  // 🌟 進入 truth_revealed 時立刻儲存對話紀錄與觸發分析
+  //    不依賴玩家是否按「離開房間」，確保關掉網頁也能留存資料
+  useEffect(() => {
+    if (phase !== 'truth_revealed' || !user?.id) return;
+
+    const currentScript = SCRIPTS.find((s: any) => s.id === roomState?.scriptId);
+    const scriptTitle = currentScript?.title || '劇本';
+    const myCharacterName = roomState?.users.find((u: any) => u.email === user.email)?.assignedCharacter ?? '';
+
+    // 完整對話（含所有人、含 free + turn）
+    const packagedDialogue: { speaker: string; text: string }[] = [];
+    for (const round of [1, 2] as const) {
+      const lines = transcriptHook.fullDialogueByRound(round);
+      if (lines.length > 0) {
+        packagedDialogue.push({ speaker: '系統', text: `【第${round === 1 ? '一' : '二'}輪討論】` });
+        packagedDialogue.push(...lines);
+      }
+    }
+
+    // 儲存劇本對話紀錄
+    if (packagedDialogue.length > 0) {
+      fetch('/api/save-dialogue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, scriptName: scriptTitle, dialogue: packagedDialogue }),
+      }).then(() => fetchRecords(user.id)).catch(e => console.error('save-dialogue failed', e));
+    }
+
+    // 觸發 AI 分析
+    const myTurns: string[] = [];
+    for (const round of [1, 2]) {
+      const myLines = transcriptHook.turnsByRoundForCharacter(round, myCharacterName);
+      if (myLines.length > 0) {
+        myTurns.push(`[第${round === 1 ? '一' : '二'}輪]\n${myLines.join('\n')}`);
+      }
+    }
+
+    if (myTurns.length > 0) {
+      setAnalyzingState('analyzing');
+      fetch('/api/analyse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          scriptName: scriptTitle,
+          turns: myTurns,
+          fullDialogue: packagedDialogue,
+          targetCharacter: myCharacterName,
+        }),
+      }).then(r => r.json()).then(data => {
+        if (data.jobId) {
+          const pollInterval = setInterval(async () => {
+            const statusRes = await fetch(`/api/analyse/status/${data.jobId}?userId=${user.id}`);
+            const statusData = await statusRes.json();
+            if (statusData.status === 'done') {
+              clearInterval(pollInterval);
+              setAnalyzingState('ready');
+              setReadyReport({ summary: statusData.result.summary, turns: statusData.result.turns });
+              fetchRecords(user.id);
+            } else if (statusData.status === 'error') {
+              clearInterval(pollInterval);
+              setAnalyzingState('idle');
+            }
+          }, 5000);
+        }
+      }).catch(e => { console.error('analyse failed', e); setAnalyzingState('idle'); });
+    }
+  }, [phase]); // 只在 phase 變化時觸發，不重複執行
 
   const resetRoomState = () => {
 
@@ -2127,64 +2195,6 @@ export default function App() {
                 packagedDialogue.push({ speaker: '系統', text: `【第${round === 1 ? '一' : '二'}輪討論】` });
                 packagedDialogue.push(...lines);
               }
-            }
-
-            // 2. 給 /analyse 用 — 只取 turn 階段、只取自己
-            const myTurns: string[] = [];
-            for (const round of [1, 2]) {
-              const myLines = transcriptHook.turnsByRoundForCharacter(round, myCharacterName);
-              if (myLines.length > 0) {
-                myTurns.push(`[第${round === 1 ? '一' : '二'}輪]\n${myLines.join('\n')}`);
-              }
-            }
-
-            // 🌟 4. 玩到結局才送分析（這個 onLeaveRoom 只在 truth_revealed 觸發，本身就是條件）
-            if (user?.id && packagedDialogue.length > 0) {
-              try {
-                await fetch('/api/save-dialogue', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: user.id, scriptName: scriptTitle, dialogue: packagedDialogue }),
-                });
-                fetchRecords(user.id);
-              } catch (e) { console.error('save-dialogue failed', e); }
-            }
-
-            if (user?.id && myTurns.length > 0) {
-              try {
-                setAnalyzingState('analyzing'); // 🌟 狀態設為分析中
-                const res = await fetch('/api/analyse', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                    userId: user.id, 
-                    scriptName: scriptTitle, 
-                    turns: myTurns,
-                    // 🌟 新增：完整對話 + 角色名稱，給 AI 當脈絡
-                    fullDialogue: packagedDialogue, 
-                    targetCharacter: myCharacterName,
-                  }),
-                });
-                const data = await res.json();
-                
-                if (data.jobId) {
-                  // 🌟 開始輪詢
-                  const pollInterval = setInterval(async () => {
-                    const statusRes = await fetch(`/api/analyse/status/${data.jobId}?userId=${user.id}`);
-                    const statusData = await statusRes.json();
-                    
-                    if (statusData.status === 'done') {
-                      clearInterval(pollInterval);
-                      setAnalyzingState('ready');
-                      setReadyReport({ summary: statusData.result.summary, turns: statusData.result.turns });
-                      fetchRecords(user.id); // 重新抓取資料，更新歷史紀錄
-                    } else if (statusData.status === 'error') {
-                      clearInterval(pollInterval);
-                      setAnalyzingState('idle');
-                    }
-                  }, 5000); // 每 5 秒問一次
-                }
-              } catch (e) { console.error('analyse failed', e); setAnalyzingState('idle'); }
             }
 
             // 5. 才開始離開

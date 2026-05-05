@@ -384,15 +384,12 @@ const ReportDetail = ({ report, scriptName, onBack }: {
                       <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }}
                         className="overflow-hidden border-t border-slate-200 bg-slate-50">
                         <div className="p-6 space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white rounded-xl p-4 border border-slate-200">
-                              <div className="flex items-center gap-1.5 mb-2">
-                                <MessageSquare size={11} className="text-slate-500" />
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">你的發言</span>
-                              </div>
-                              <p className="text-sm text-slate-700 leading-relaxed">{turn.repaired}</p>
+                          <div className="bg-white rounded-xl p-4 border border-slate-200">
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <MessageSquare size={11} className="text-slate-500" />
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">你的發言</span>
                             </div>
-
+                            <p className="text-sm text-slate-700 leading-relaxed">{turn.repaired}</p>
                           </div>
                           {jv.one_line && (
                             <div className="bg-white rounded-xl p-4 border border-slate-200">
