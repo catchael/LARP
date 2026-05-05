@@ -149,38 +149,30 @@ router.post("/save-dialogue", async (req, res) => {
 //  ASR：Groq Whisper
 // ─────────────────────────────────────────────────────────
 
-async function transcribeWithDeepgram(audioBuffer: Buffer): Promise<string> {
-  const model = "nova-2"; // nova-3 不支援中文，改用 nova-2
-  const params = new URLSearchParams({
-    model,
-    language: "zh-TW",
-    smart_format: "true",
-    filler_words: "true",
-    punctuate: "true",
-  });
+async function transcribeWithGroq(audioBuffer: Buffer, script: ScriptMeta): Promise<string> {
+  const wavBuffer = await webmToWav16k(audioBuffer);
+  const { Blob } = await import("buffer");
+  const audioBlob = new Blob([wavBuffer], { type: "audio/wav" });
+  const audioFile = new File([audioBlob as any], "audio.wav", { type: "audio/wav" });
 
-  const response = await fetch(
-    `https://api.deepgram.com/v1/listen?${params.toString()}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
-        "Content-Type": "audio/wav",
-      },
-      body: new Uint8Array(audioBuffer),
-    }
-  );
+  const formData = new FormData();
+  formData.append("file", audioFile as any);
+  formData.append("model", "whisper-large-v3-turbo");
+  formData.append("language", "zh");
+  formData.append("response_format", "text");
+  formData.append("prompt", script.glossary.join("、"));
+
+  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: formData,
+  });
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Deepgram STT ${response.status}: ${body.slice(0, 300)}`);
+    throw new Error(`Groq STT ${response.status}: ${body.slice(0, 300)}`);
   }
-
-  const data = await response.json();
-  const transcript =
-    data?.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
-
-  return transcript.trim();
+  return (await response.text()).trim();
 }
 
 // ─────────────────────────────────────────────────────────
@@ -242,14 +234,19 @@ router.post("/process-voice-turn", upload.single("audio"), async (req, res) => {
 
     if (!audioBuffer) return res.status(400).json({ error: "沒有接收到音檔" });
 
-    console.log(`[STT] 收到音檔 ${audioBuffer.length} bytes，準備送 Deepgram`);
-    const rawText = await transcribeWithDeepgram(audioBuffer);
+    console.log(`[STT] 收到音檔 ${audioBuffer.length} bytes，準備送 Groq Whisper`);
+    const rawText = await transcribeWithGroq(audioBuffer, script);
     console.log(`[STT] ASR 回傳：「${rawText}」（${rawText.length} 字）`);
 
     if (!rawText.trim()) return res.json({ success: true, text: "" });
 
-    // Deepgram 不需要幻覺過濾，只過濾純標點或空白的無效回傳
-    if (/^[，。！？、…\s]+$/.test(rawText.trim())) {
+    // Whisper 幻覺過濾：靜音時會產生假日韓文，偵測到就丟棄
+    const japaneseCount = (rawText.match(/[぀-ゟ゠-ヿ]/g) ?? []).length;
+    const koreanCount = (rawText.match(/[가-힯ᄀ-ᇿ]/g) ?? []).length;
+    const totalChars = rawText.replace(/\s/g, '').length || 1;
+    const foreignRatio = (japaneseCount + koreanCount) / totalChars;
+    if (foreignRatio > 0.3 || /^[，。！？、…\s]+$/.test(rawText.trim())) {
+      console.warn(`[STT] 偵測到幻覺輸出，已丟棄：「${rawText.slice(0, 30)}」`);
       return res.json({ success: true, text: "" });
     }
 
