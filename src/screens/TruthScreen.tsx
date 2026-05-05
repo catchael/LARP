@@ -262,7 +262,7 @@ export const TruthScreen: React.FC<TruthScreenProps> = ({
         <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-center gap-4 flex-wrap">
           {/* 麥克風按鈕 */}
           <button
-            onClick={toggleMic}
+            onClick={() => { console.log('[TruthScreen] mic button clicked, toggleMic:', typeof toggleMic); toggleMic(); }}
             className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm border transition-all active:scale-95 shadow-md ${
               isMicOn ? T.micOn : T.micOff
             }`}
