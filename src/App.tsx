@@ -369,12 +369,14 @@ export default function App() {
     currentRoundRef.current = (roomState as any)?.currentRound ?? 1;
   }, [roomState]);
 
-  // 🌟 每次進入搜查階段時清空當前背包、已撿金幣、已解鎖進階特徵
+  // 🌟 每次進入搜查階段時清空當前背包、已撿金幣、已解鎖進階特徵（人物+證物）
   useEffect(() => {
     if (phase === 'game_search') {
       setBackpack([]);
-      setCollectedCoins([]);           // 金幣每回合刷新
-      setUnlockedAdvancedDetails([]);  // 進階特徵每回合可重新解鎖
+      setCollectedCoins([]);
+      setUnlockedAdvancedDetails([]);
+    setUnlockedCharacterAdvanced([]);
+      setUnlockedCharacterAdvanced([]);
     }
   }, [phase]);
 
@@ -413,6 +415,7 @@ export default function App() {
     setCoinCount(0);
     setBackpackCapacity(4);
     setUnlockedAdvancedDetails([]);
+    setUnlockedCharacterAdvanced([]);
 
     // 3. 清空筆記本與會議室字幕
     setTimelineNodes([]);
