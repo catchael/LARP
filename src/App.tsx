@@ -409,7 +409,7 @@ export default function App() {
     setViewingEvidence(null);
     setCollectedCoins([]);
     setCoinCount(0);
-    setBackpackCapacity(3);
+    setBackpackCapacity(4);
     setUnlockedAdvancedDetails([]);
 
     // 3. 清空筆記本與會議室字幕
