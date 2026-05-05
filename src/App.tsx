@@ -200,7 +200,7 @@ export default function App() {
 
   // Shop & Coins State
   const [coinCount, setCoinCount] = useState(0);
-  const [backpackCapacity, setBackpackCapacity] = useState(3);
+  const [backpackCapacity, setBackpackCapacity] = useState(4);
   const [unlockedAdvancedDetails, setUnlockedAdvancedDetails] = useState<string[]>([]);
   const [unlockedCharacterAdvanced, setUnlockedCharacterAdvanced] = useState<string[]>([]); 
   const [isShopOpen, setIsShopOpen] = useState(false);
