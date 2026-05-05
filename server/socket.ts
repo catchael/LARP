@@ -180,21 +180,25 @@ export function registerSocketHandlers(io: Server) {
     }
 
     // 🌟 修正後的輪次邏輯：
-    //   先移動 index；只有輪到「真人」時才計入 turnsPassed，
-    //   避免 AI 自動跳過的 5 秒也被計入，導致真人需要說兩輪才結束。
-    room.currentSpeakerIndex = (room.currentSpeakerIndex + 1) % room.meetingUsers.length;
+    //   在移動 index 之前，先判斷「剛說完的那個人」是否是真人。
+    //   若是，累計已完成真人數；若已完成數 >= 真人總數，整圈結束。
+    //   這樣 startRoundRobin 的初始呼叫（index=-1）不會計入，
+    //   且 AI 的 5 秒跳過也不會誤觸發結束。
+    const justFinishedUser = room.currentSpeakerIndex >= 0
+      ? room.meetingUsers[room.currentSpeakerIndex]
+      : null;
 
-    const currentUser = room.meetingUsers[room.currentSpeakerIndex];
-    if (currentUser && !currentUser.isAI) {
+    if (justFinishedUser && !justFinishedUser.isAI) {
       room.turnsPassed = (room.turnsPassed || 0) + 1;
+      const humanCount = room.meetingUsers.filter(u => !u.isAI).length;
+      if (room.turnsPassed >= humanCount && room.meetingStage === 'round_robin') {
+        startOrganizingStage(roomId);
+        return;
+      }
     }
 
-    // 真人發言人數 > 真人總數 → 整圈說完，進整理思緒
-    const humanCount = room.meetingUsers.filter(u => !u.isAI).length;
-    if ((room.turnsPassed || 0) >= humanCount && room.meetingStage === 'round_robin') {
-      startOrganizingStage(roomId);
-      return;
-    }
+    // 移動到下一個人
+    room.currentSpeakerIndex = (room.currentSpeakerIndex + 1) % room.meetingUsers.length;
 
     room.turnStartTime = Date.now();
     room.isWarningActive = false;
