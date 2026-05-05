@@ -1293,16 +1293,17 @@ export default function App() {
   }, [isMicOn, socket, currentSpeaker?.id, phase]); // ⚠️ 加上 phase 以便在進入/離開自由開麥階段時重新判斷
 
   const toggleMic = () => {
-    if (!socket) return;
+    if (!socket) { console.log('[toggleMic] blocked: no socket'); return; }
 
     // 🌟 新增：取得當前階段，並判斷是否在封麥環節
     const meetingStage = (roomState as any)?.meetingStage;
-    if (meetingStage === 'organizing' || meetingStage === 'voting_prompt') return;
+    if (meetingStage === 'organizing' || meetingStage === 'voting_prompt') { console.log('[toggleMic] blocked: meetingStage', meetingStage); return; }
 
     // 🌟 修改：加入 free_discussion 的判斷
     const isFreeMicPhase = ['room_lobby', 'character_preview', 'game_profile', 'game_search', 'search_end', 'truth_revealed'].includes(phase) || meetingStage === 'free_discussion';
     const allowed = isFreeMicPhase || currentSpeaker?.id === socket.id;
-    if (!allowed) return;
+    console.log('[toggleMic] phase:', phase, 'isFreeMicPhase:', isFreeMicPhase, 'allowed:', allowed, 'localStream:', !!localStreamRef.current);
+    if (!allowed) { console.log('[toggleMic] blocked: not allowed'); return; }
 
     if (!localStreamRef.current) {
       if (isMicRequestingRef.current) return; // ✅ 已經在請求中，不重複
