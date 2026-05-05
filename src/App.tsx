@@ -1750,21 +1750,10 @@ export default function App() {
             </div>
           </button>
 
-          {/* 🌟 新增：下拉選單 (滑鼠 hover 時優雅滑出) */}
-          <div className="absolute top-14 right-0 pt-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-0">
-            <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 p-2 flex flex-col w-40">
-              {/* 顯示目前暱稱 */}
-              <div className="px-3 py-2 text-xs font-bold text-slate-400 border-b border-slate-100 mb-1 truncate text-center">
-                {user.name || user.email.split('@')[0]}
-              </div>
-              
-              {/* 重選頭貼與暱稱按鈕 */}
-              <button 
-                onClick={() => setPhase('avatar_selection')}
-                className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors w-full"
-              >
-                <UserCircle size={16} /> 修改個人資料
-              </button>
+          {/* 懸浮暱稱提示（只顯示名稱，不含按鈕） */}
+          <div className="absolute top-16 right-0 pt-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-0 pointer-events-none">
+            <div className="bg-slate-800/90 backdrop-blur-md rounded-xl shadow-lg px-3 py-1.5 whitespace-nowrap">
+              <span className="text-xs font-bold text-white">{user.name || user.email.split('@')[0]}</span>
             </div>
           </div>
         </div>
