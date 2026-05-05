@@ -150,7 +150,7 @@ router.post("/save-dialogue", async (req, res) => {
 // ─────────────────────────────────────────────────────────
 
 async function transcribeWithDeepgram(audioBuffer: Buffer): Promise<string> {
-  const model = MODELS.STT_AUDIO.replace("deepgram/", "");
+  const model = "nova-2"; // nova-3 不支援中文，改用 nova-2
   const params = new URLSearchParams({
     model,
     language: "zh-TW",

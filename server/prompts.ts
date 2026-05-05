@@ -22,7 +22,7 @@ P0_STT
 //
 // 注意：P1_TYPE 只輸出 JSON {type}，不再產生黃金答案
 export const MODELS = {
-  STT_AUDIO:           "deepgram/nova-3",                // 音檔 → 文字（非 LLM）
+  STT_AUDIO:           "deepgram/nova-2",                // 音檔 → 文字（nova-3 不支援中文）
   P0_STT:              "meta/llama-3.1-8b-instruct",       // 文字校對（推薦：Qwen 中文強）
   P0_CONTEXT_SUMMARY:  "deepseek-ai/deepseek-v4-pro",
   P1_TYPE:             "meta/llama-3.3-70b-instruct",    // 類型判定
