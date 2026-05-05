@@ -180,14 +180,18 @@ export function registerSocketHandlers(io: Server) {
     }
 
     // 🌟 修正後的輪次邏輯：
-    //   先移動 index，讓這個人說話；說完（下次被呼叫）時才判斷是否整圈結束。
-    //   turnsPassed 在「移動後」才 +1，代表「已完成發言的人數」，
-    //   等於總人數時代表整圈說完，進整理思緒。
+    //   先移動 index；只有輪到「真人」時才計入 turnsPassed，
+    //   避免 AI 自動跳過的 5 秒也被計入，導致真人需要說兩輪才結束。
     room.currentSpeakerIndex = (room.currentSpeakerIndex + 1) % room.meetingUsers.length;
-    room.turnsPassed = (room.turnsPassed || 0) + 1;
 
-    // 已完成發言人數 === 總人數 → 整圈說完，進整理思緒
-    if (room.turnsPassed > room.meetingUsers.length && room.meetingStage === 'round_robin') {
+    const currentUser = room.meetingUsers[room.currentSpeakerIndex];
+    if (currentUser && !currentUser.isAI) {
+      room.turnsPassed = (room.turnsPassed || 0) + 1;
+    }
+
+    // 真人發言人數 > 真人總數 → 整圈說完，進整理思緒
+    const humanCount = room.meetingUsers.filter(u => !u.isAI).length;
+    if ((room.turnsPassed || 0) >= humanCount && room.meetingStage === 'round_robin') {
       startOrganizingStage(roomId);
       return;
     }

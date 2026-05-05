@@ -387,6 +387,17 @@ export default function App() {
     }
   }, [phase]);
 
+  // 🌟 進入封麥階段（整理思緒、投票）時，強制關掉已開啟的麥克風
+  //    避免玩家在 search_end 開麥後進會議室，整理思緒階段仍顯示為開麥狀態
+  useEffect(() => {
+    const meetingStage = (roomState as any)?.meetingStage;
+    const isSealedStage = meetingStage === 'organizing' || meetingStage === 'pre_round_organizing' || meetingStage === 'voting_prompt';
+    if (isSealedStage && isMicOn) {
+      setIsMicOn(false);
+      socket?.emit('toggle_mic', false);
+    }
+  }, [(roomState as any)?.meetingStage]);
+
   const resetRoomState = () => {
 
     if (user?.email) {
