@@ -8,6 +8,7 @@ function getGroqClient() {
     if (!import.meta.env.VITE_GROQ_API_KEY) {
       throw new Error("Missing VITE_GROQ_API_KEY environment variable. 請檢查 .env 檔案。");
     }
+    // 直接用 Groq 官方的伺服器，不需要改 baseURL
     groqClient = new Groq({ 
       apiKey: import.meta.env.VITE_GROQ_API_KEY,
       dangerouslyAllowBrowser: true 
@@ -16,32 +17,8 @@ function getGroqClient() {
   return groqClient;
 }
 
-export interface PuzzleEvaluation {
-  passed: boolean;
-  score: number;
-  structureScore: number;
-  fluencyScore: number;
-  npcResponse: string;
-  coachFeedback: string[];
-  rewritten: string;
-}
-
-// 🌟 改用 Groq 平台上最強的開源推理模型
-const MODEL_NAME = "deepseek-r1-distill-llama-70b";
-
-// 🌟 新增 JSON 清洗工具：負責把 <think> 區塊與多餘字元砍掉
-function stripReasoning(text: string): string {
-  // 1. 移除 <think>...</think> 區塊（含跨行）
-  let cleaned = text.replace(/<think[\s\S]*?<\/think>/gi, '');
-  // 2. 移除 Markdown 標記
-  cleaned = cleaned.replace(/```json\n?|```/g, '');
-  // 3. 尋找第一個 { 或 [，把前面 AI 囉嗦的廢話（例如 "這是我為您生成的..."）全部切掉
-  const firstBracket = cleaned.search(/[\{\[]/);
-  if (firstBracket >= 0) {
-    cleaned = cleaned.slice(firstBracket);
-  }
-  return cleaned.trim();
-}
+// 🌟 直接指定 Groq 官方支援的 Qwen 模型
+const MODEL_NAME = "qwen/qwen3-32b";
 
 export async function generateCustomFramework(userPrompt: string): Promise<Level> {
   const groq = getGroqClient();
