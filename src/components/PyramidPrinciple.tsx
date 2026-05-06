@@ -62,11 +62,10 @@ const PRINCIPLES = [
 
 // Pyramid layer shapes (trapezoidal via clip-path polygon %)
 const LAYERS = [
-  // top → bottom: index 0 = 結論先行 (apex), 3 = 邏輯遞進 (base)
-  { clip: 'polygon(27% 0%, 73% 0%, 88% 100%, 12% 100%)', label: '抽象結論', height: '22%' },
-  { clip: 'polygon(12% 0%, 88% 0%, 96% 100%, 4% 100%)',  label: '',         height: '24%' },
-  { clip: 'polygon(4% 0%, 96% 0%, 100% 100%, 0% 100%)',  label: '',         height: '26%' },
-  { clip: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)', label: '具體數據', height: '28%' },
+  { clip: 'polygon(27% 0%, 73% 0%, 88% 100%, 12% 100%)', height: '22%' },
+  { clip: 'polygon(12% 0%, 88% 0%, 96% 100%, 4% 100%)',  height: '24%' },
+  { clip: 'polygon(4% 0%, 96% 0%, 100% 100%, 0% 100%)',  height: '26%' },
+  { clip: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)', height: '28%' },
 ];
 
 export const PyramidPrinciple: React.FC = () => {
@@ -78,7 +77,7 @@ export const PyramidPrinciple: React.FC = () => {
       {/* Pyramid */}
       <div className="flex gap-6 items-start">
         {/* The pyramid */}
-        <div className="flex flex-col-reverse w-52 flex-shrink-0 overflow-hidden rounded-xl border border-slate-200">
+        <div className="flex flex-col w-52 flex-shrink-0 overflow-hidden rounded-xl border border-slate-200">
           {LAYERS.map((layer, i) => {
             const p = PRINCIPLES[i];
             const isActive = i === active;

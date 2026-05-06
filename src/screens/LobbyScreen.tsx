@@ -36,7 +36,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ setPhase, setActiveMod
         <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center mb-6 text-white group-hover:scale-110 transition-transform">
           <Brain size={32} />
         </div>
-        <h3 className="text-2xl font-bold mb-2">認知習慣</h3>
+        <h3 className="text-2xl font-bold mb-2">結構思考力</h3>
         <p className="text-slate-600">優化邏輯架構，確保資訊傳達清晰準確。</p>
       </div>
 
