@@ -54,6 +54,9 @@ import SinglePlayerApp from './single-player/SinglePlayerApp';
 export default function App() {
   const scriptIdRef = useRef<number>(1);
   const [phase, setPhase] = useState<AppPhase>('login');
+  const phaseRef = useRef<AppPhase>('login');
+  // 🌟 讓 socket 閉包也能讀到最新的 phase（避免 stale closure 問題）
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
   // 🌟 新增：用來控制問卷彈窗的顯示，以及記住剛玩完的劇本名稱
   const [isNewUser, setIsNewUser] = useState(false);
   const [showSurveyPrompt, setShowSurveyPrompt] = useState(false);
@@ -909,10 +912,12 @@ export default function App() {
     });
 
     newSocket.on('room_disbanded', (msg: string) => {
-      // 🌟 先把畫面切回大廳，再彈提示，避免 alert 期間背景一片黑看起來像當機
+      // 🌟 真相大白階段：玩家各自停留在畫面上，不因其他人離開導致房間解散而被強制踢出
+      //    （常見情境：最後一人也按離開 → server 銷毀房間 → 廣播 room_disbanded → 但自己已是 truth_revealed）
+      if (phaseRef.current === 'truth_revealed') return;
+      // 正常解散：先把畫面切回大廳，再彈提示
       resetRoomState();
       setPhase('lobby');
-      // 用 setTimeout 讓 React 先 commit 一次 render
       setTimeout(() => alert(msg), 0);
     });
 

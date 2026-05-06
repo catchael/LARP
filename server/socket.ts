@@ -770,7 +770,11 @@ export function registerSocketHandlers(io: Server) {
         } else {
           // 房間還有人，轉移房主權限
           if (wasHost) room.users[0].isHost = true;
-          io.to(roomId).emit('room_state', getRoomState(roomId));
+          // 🌟 真相大白／結局階段：玩家各自進入，不廣播 room_state，
+          //    否則 server 殘存的 game_ending phase 會覆蓋留下來玩家的 truth_revealed 畫面
+          if (room.phase !== 'game_ending') {
+            io.to(roomId).emit('room_state', getRoomState(roomId));
+          }
           if (room.isPublic) broadcastPublicRooms(scriptId);
         }
       }
