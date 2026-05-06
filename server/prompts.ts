@@ -24,11 +24,11 @@ P0_STT
 export const MODELS = {
   STT_AUDIO:           "deepgram/nova-2",                // 音檔 → 文字（nova-3 不支援中文）
   P0_STT:              "meta/llama-3.1-8b-instruct",       // 文字校對（推薦：Qwen 中文強）
-  P0_CONTEXT_SUMMARY:  "deepseek-ai/deepseek-v4-pro",
+  P0_CONTEXT_SUMMARY:  "meta/llama-3.3-70b-instruct",
   P1_TYPE:             "meta/llama-3.3-70b-instruct",    // 類型判定
-  P2_LOGIC:            "deepseek-ai/deepseek-v4-pro",
-  P3_ACCESSIBILITY:    "deepseek-ai/deepseek-v4-pro",
-  P4_STRUCTURE:        "deepseek-ai/deepseek-v4-pro",
+  P2_LOGIC:            "openai/gpt-oss-120b",
+  P3_ACCESSIBILITY:    "nvidia/nemotron-3-super-120b-a12b",
+  P4_STRUCTURE:        "qwen/qwen3-next-80b-a3b-instruct",
   P_JUDGE:             "meta/llama-3.3-70b-instruct",
 } as const;
 

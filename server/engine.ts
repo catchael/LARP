@@ -119,7 +119,7 @@ export class LARPEngine {
   ): Promise<any> {
     let currentMaxTokens = maxTokens;
     // 🌟 reasoning 模型清單：要關 thinking
-    const isReasoningModel = modelName.includes("deepseek") || modelName.includes("r1");
+    const isReasoningModel = modelName.includes("deepseek") || modelName.includes("r1") || modelName.includes("gpt-oss") || modelName.includes("nemotron-3-super");
 
     for (let i = 0; i < retries; i++) {
       try {

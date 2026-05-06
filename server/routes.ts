@@ -195,18 +195,25 @@ async function correctWithP0STT(rawText: string, script: ScriptMeta): Promise<st
 輸入逐字稿：${rawText}
 直接輸出修復後文字，無需任何說明。`;
 
+  // 中文每字約 2 token，給足空間避免截斷
+  const maxTokens = Math.max(512, Math.ceil(rawText.length * 3));
+
   const completion = await nvidiaClient.chat.completions.create({
     model: "meta/llama-3.3-70b-instruct",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.0,
-    max_tokens: Math.ceil(rawText.length * 2),
+    max_tokens: maxTokens,
   });
 
   let corrected = completion.choices[0].message.content?.trim() || rawText;
+
+  // 🌟 只過濾明顯異常（縮水超過 20% 或膨脹超過 30%），寬鬆一些避免誤 fallback
   const ratio = corrected.length / Math.max(rawText.length, 1);
-  if (ratio < 0.9 || ratio > 1.1) {
-    console.warn(`[Voice] STT校正後字數比例 ${Math.round(ratio * 100)}%（預期 90~110%），fallback raw`);
+  if (ratio < 0.8 || ratio > 1.3) {
+    console.warn(`[Voice] STT校正異常（比例 ${Math.round(ratio * 100)}%，原文 ${rawText.length} 字，修正後 ${corrected.length} 字），fallback raw`);
     corrected = rawText;
+  } else {
+    console.log(`[Voice] STT校正完成（${rawText.length} 字 → ${corrected.length} 字）`);
   }
   return corrected;
 }
