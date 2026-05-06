@@ -138,7 +138,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden relative">
+    <div className="h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900 overflow-y-auto overflow-x-hidden relative">
       <div className="fixed top-0 left-0 w-full h-1 z-50 bg-slate-200">
         <motion.div 
           className="h-full bg-indigo-600 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
