@@ -1125,15 +1125,10 @@ export function registerSocketHandlers(io: Server) {
       const room = rooms.get(currentRoomId);
       if (!room) return;
 
-      const user = room.users.find(u => u.id === socket.id);
-      if (!user?.isHost) return;
-
-      if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
-      room.phase = 'truth_revealed';
-      room.phaseEndTime = undefined;
-
-      io.to(currentRoomId).emit('room_state', getRoomState(currentRoomId));
-      console.log(`[系統] 房間 ${currentRoomId} 進入真相大白階段`);
+      // 🌟 每個玩家各自觸發，只更新自己的 phase，不廣播給其他人
+      // 只對發出請求的 socket 回傳狀態（而不是 io.to(room).emit）
+      socket.emit('personal_phase_override', { phase: 'truth_revealed' });
+      console.log(`[系統] ${socket.id} 個人進入真相大白階段`);
     });
 
     socket.on('start_ending_phase', () => {

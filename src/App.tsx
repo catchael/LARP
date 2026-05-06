@@ -416,6 +416,10 @@ export default function App() {
       }
     }
 
+    console.log('[truth_revealed] packagedDialogue:', packagedDialogue.length, 'entries');
+    console.log('[truth_revealed] transcriptHook entries:', transcriptHook.entries.length);
+    console.log('[truth_revealed] myCharacterName:', myCharacterName);
+
     // 儲存劇本對話紀錄
     if (packagedDialogue.length > 0) {
       fetch('/api/save-dialogue', {
@@ -852,6 +856,11 @@ export default function App() {
         });
       }, 1000);
       (window as any).reconnectInterval = interval;
+    });
+
+    // 🌟 個人 phase 切換（不影響其他玩家）
+    newSocket.on('personal_phase_override', (data: { phase: string }) => {
+      setPhase(data.phase as any);
     });
 
     newSocket.on('player_reconnected', (data: { email: string }) => {
@@ -2171,8 +2180,8 @@ export default function App() {
           isKillerCaught={isKillerCaught}
           isHost={isHost}
           onNextPhase={() => {
-            // 房主點擊後，通知所有人進入最後的真相大白
-            if (isHost) socket?.emit('start_truth_phase');
+            // 每個玩家各自進入真相大白，不需等待房主
+            socket?.emit('start_truth_phase');
           }}
           surveyCount={surveys.length}
         />
