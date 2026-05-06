@@ -5,7 +5,7 @@
 import OpenAI from "openai";
 import db from "./db.js";
 import {
-  P0_STT, P0_CONTEXT_SUMMARY, P1_TYPE,
+  P0_CONTEXT_SUMMARY, P1_TYPE,
   P2_LOGIC, P3_ACCESSIBILITY, P4_STRUCTURE, P_JUDGE,
   MODELS,
 } from "./prompts.js";
@@ -184,13 +184,8 @@ export class LARPEngine {
     contextSummary = '',
     targetCharacter = '',
   ): Promise<any> {
-    // ─── 步驟 1：P0_STT 文字校對 ───
-    let repaired = await this.nvidia(
-      P0_STT.replace("{raw}", raw),
-      false,
-      MODELS.P0_STT,
-    );
-    if (!repaired || typeof repaired !== "string") repaired = raw;
+    // ─── 步驟 1：P0_STT 已在 routes.ts 即時處理，直接使用傳入文字 ───
+    const repaired = raw;
 
     // ─── 步驟 2：P1_TYPE（判定發言類型）───
     const typeResult = await this.nvidia(

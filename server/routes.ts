@@ -176,39 +176,28 @@ async function transcribeWithGroq(audioBuffer: Buffer, script: ScriptMeta): Prom
 }
 
 // ─────────────────────────────────────────────────────────
-//  LLM 名詞修正（可選層）
+//  STT 校正（使用 P0_STT prompt + glossary）
 // ─────────────────────────────────────────────────────────
 
-async function correctTermsWithLlama(rawText: string, script: ScriptMeta): Promise<string> {
+async function correctWithP0STT(rawText: string, script: ScriptMeta): Promise<string> {
   const glossaryHint = script.glossary.join("、");
+
+  const prompt = `你是繁體中文語音逐字稿校對員，熟悉以下劇本專有名詞：${glossaryHint}。
+任務：修復 STT 辨識錯誤，還原說話者真實語意。
+規則：
+1. 只修同音異字與明顯辨識錯誤（例：「摧之作人」→「崔製作人」）
+2. 保留所有口語詞（「然後」「那個」「就是說」「嗯」「啊」），這些是分析素材
+3. 保留停頓、重複、不流暢，這些是表達特徵
+4. 遇到不確定的詞，保留原文
+5. 不得刪詞、加詞、重組句子
+6. 禁止把語意正確的一般詞換成更具體的劇本詞（例：「大雨」不可換成「暴雨特報」）
+7. 輸出長度與輸入差距 ≤ 5%
+輸入逐字稿：${rawText}
+直接輸出修復後文字，無需任何說明。`;
 
   const completion = await nvidiaClient.chat.completions.create({
     model: "meta/llama-3.3-70b-instruct",
-    messages: [
-      {
-        role: "system",
-        content: `你是繁體中文語音逐字稿的「音近字修正器」。
-
-【唯一任務】
-找出輸入文字中因 ASR（語音辨識）誤判造成的「音近字錯誤」，用下方詞表中的正確詞替換。
-
-【詞表（僅用於對照，不可憑此增加內容）】
-${glossaryHint}
-
-【嚴格禁止事項 — 違反即視為失敗】
-1. 禁止增加任何原文沒有的詞、句子、說明。
-2. 禁止把「兇手」「他」「那個人」等玩家自己用的替代稱呼換成詞表裡的完整名稱——玩家自己選的用法不是錯誤。
-3. 禁止把「房間」「現場」「角落」等通用詞換成詞表裡的具體地點名稱。
-4. 禁止刪除口語詞（然後、那個、就是、嗯、啊）、重複、停頓——這些是分析素材。
-5. 禁止重組句子、修改標點、加說明文字。
-6. 輸出字數必須與輸入字數差距 ≤5%。若無音近字錯誤，直接逐字輸出原文。
-
-【判斷標準】
-只有當原文詞語與詞表詞語「讀音相同或極近，且語意上詞表的詞明顯更合理」時才替換。
-例：「摧之作人」→「崔製作人」✓　　「兇手」→「新亭洞連環殺人魔」✗`,
-      },
-      { role: "user", content: rawText },
-    ],
+    messages: [{ role: "user", content: prompt }],
     temperature: 0.0,
     max_tokens: Math.ceil(rawText.length * 2),
   });
@@ -216,7 +205,7 @@ ${glossaryHint}
   let corrected = completion.choices[0].message.content?.trim() || rawText;
   const ratio = corrected.length / Math.max(rawText.length, 1);
   if (ratio < 0.9 || ratio > 1.1) {
-    console.warn(`[Voice] LLM 修正後字數比例 ${Math.round(ratio * 100)}%（預期 90~110%），fallback raw`);
+    console.warn(`[Voice] STT校正後字數比例 ${Math.round(ratio * 100)}%（預期 90~110%），fallback raw`);
     corrected = rawText;
   }
   return corrected;
@@ -252,9 +241,9 @@ router.post("/process-voice-turn", upload.single("audio"), async (req, res) => {
 
         let correctedText = rawText;
     try {
-      correctedText = await correctTermsWithLlama(rawText, script);
+      correctedText = await correctWithP0STT(rawText, script);
     } catch (llmErr: any) {
-      console.warn("[Voice] LLM 修正失敗，直接用 ASR 原文：", llmErr.message);
+      console.warn("[Voice] STT校正失敗，直接用 ASR 原文：", llmErr.message);
     }
 
     res.json({ success: true, text: `${character}：${correctedText}` });
