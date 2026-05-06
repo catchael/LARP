@@ -3,13 +3,11 @@ import { Level } from "../lib/levels";
 
 let groqClient: Groq | null = null;
 
-// 1. 初始化 Groq Client
 function getGroqClient() {
   if (!groqClient) {
     if (!import.meta.env.VITE_GROQ_API_KEY) {
       throw new Error("Missing VITE_GROQ_API_KEY environment variable. 請檢查 .env 檔案。");
     }
-    // 因為是在瀏覽器前端直接呼叫，必須開啟 dangerouslyAllowBrowser
     groqClient = new Groq({ 
       apiKey: import.meta.env.VITE_GROQ_API_KEY,
       dangerouslyAllowBrowser: true 
@@ -28,10 +26,23 @@ export interface PuzzleEvaluation {
   rewritten: string;
 }
 
-// 指定使用 Groq 免費方案最強且適合 JSON 推理的模型
-const MODEL_NAME = "llama-3.3-70b-versatile";
+// 🌟 改用 Groq 平台上最強的開源推理模型
+const MODEL_NAME = "deepseek-r1-distill-llama-70b";
 
-// 2. 生成自訂關卡的 API 呼叫
+// 🌟 新增 JSON 清洗工具：負責把 <think> 區塊與多餘字元砍掉
+function stripReasoning(text: string): string {
+  // 1. 移除 <think>...</think> 區塊（含跨行）
+  let cleaned = text.replace(/<think[\s\S]*?<\/think>/gi, '');
+  // 2. 移除 Markdown 標記
+  cleaned = cleaned.replace(/```json\n?|```/g, '');
+  // 3. 尋找第一個 { 或 [，把前面 AI 囉嗦的廢話（例如 "這是我為您生成的..."）全部切掉
+  const firstBracket = cleaned.search(/[\{\[]/);
+  if (firstBracket >= 0) {
+    cleaned = cleaned.slice(firstBracket);
+  }
+  return cleaned.trim();
+}
+
 export async function generateCustomFramework(userPrompt: string): Promise<Level> {
   const groq = getGroqClient();
   
@@ -73,7 +84,7 @@ export async function generateCustomFramework(userPrompt: string): Promise<Level
       messages: [
         { 
           role: "system", 
-          content: "你是一個專業的遊戲設計師，請務必只輸出純 JSON 格式的字串，不要包含任何 Markdown 標記 (例如 ```json)。" 
+          content: "你是一個專業的遊戲設計師，請務必只輸出純 JSON 格式的字串，不要包含任何額外的說明。" 
         },
         { 
           role: "user", 
@@ -81,15 +92,14 @@ export async function generateCustomFramework(userPrompt: string): Promise<Level
         }
       ],
       model: MODEL_NAME,
-      temperature: 0.7,
-      // 強制回傳 JSON 格式
-      response_format: { type: "json_object" },
+      temperature: 0.6, // 推理模型建議溫度稍微調低一點，讓 JSON 結構更穩定
     });
 
     const text = response.choices[0]?.message?.content;
     if (!text) throw new Error("Failed to get content from Groq.");
 
-    const cleanedText = text.replace(/```json\n?|```/g, '').trim();
+    // 使用清洗工具過濾資料
+    const cleanedText = stripReasoning(text);
     const json = JSON.parse(cleanedText) as Level;
     json.id = 999;
     return json;
@@ -103,7 +113,6 @@ export async function generateCustomFramework(userPrompt: string): Promise<Level
   }
 }
 
-// 3. 評估玩家發言的 API 呼叫
 export async function evaluatePuzzleSpeech(level: Level, transcript: string): Promise<PuzzleEvaluation> {
   const groq = getGroqClient();
   
@@ -142,7 +151,7 @@ ${irrelevantClues}
       messages: [
         { 
           role: "system", 
-          content: "你是一個專業的口語表達教練與 RPG NPC。請務必只輸出純 JSON 格式的字串，不要包含任何 Markdown 標記。" 
+          content: "你是一個專業的口語表達教練與 RPG NPC。請先在腦中思考，思考完畢後務必只輸出純 JSON 格式的字串。" 
         },
         { 
           role: "user", 
@@ -150,15 +159,14 @@ ${irrelevantClues}
         }
       ],
       model: MODEL_NAME,
-      temperature: 0.7,
-      // 強制回傳 JSON 格式
-      response_format: { type: "json_object" },
+      temperature: 0.6,
     });
 
     const text = response.choices[0]?.message?.content;
     if (!text) throw new Error("Failed to get content from Groq.");
 
-    const cleanedText = text.replace(/```json\n?|```/g, '').trim();
+    // 使用清洗工具過濾資料
+    const cleanedText = stripReasoning(text);
     return JSON.parse(cleanedText) as PuzzleEvaluation;
     
   } catch (e: any) {
