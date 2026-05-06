@@ -78,7 +78,7 @@ export interface RoomState {
 }
 
 export interface TeachingModule {
-  id: 'delivery' | 'cognitive' | 'vocal';
+  id: 'delivery' | 'structure' | 'vocal';
   title: string;
   pages: TeachingPage[];
 }

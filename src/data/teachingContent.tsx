@@ -1,6 +1,7 @@
 import React from 'react';
 import { TeachingModule } from '../types';
-import { LivePauseDemo, SpeedChart, CCCFlow, VolumeMeter } from '../components/Visualizations';
+import { LivePauseDemo, SpeedChart, VolumeMeter } from '../components/Visualizations';
+import { PyramidPrinciple } from '../components/PyramidPrinciple';
 
 export const TEACHING_CONTENT: TeachingModule[] = [
   {
@@ -20,23 +21,13 @@ export const TEACHING_CONTENT: TeachingModule[] = [
     ]
   },
   {
-    id: 'cognitive',
-    title: '認知習慣 (Cognitive)',
+    id: 'structure',
+    title: '結構思考力 (Structure)',
     pages: [
       {
-        title: '一次完成一個想法',
-        content: '如果一次性傳達太多不同的資訊，聽眾會分心。確保每個觀點都有明確的起頭與結束。',
-        visualization: (
-          <div className="bg-emerald-50 p-6 rounded-xl border border-emerald-100">
-            <p className="text-emerald-800 font-medium mb-2">範例：</p>
-            <p className="text-slate-700 italic">「首先，關於不在場證明... (結束)。接著，我們來看動機...」</p>
-          </div>
-        )
-      },
-      {
-        title: 'CCC 溝通框架',
-        content: 'Context (背景) - Core (核心) - Connect (連結)。這是一個強大的邏輯架構。',
-        visualization: <CCCFlow />
+        title: '金字塔原理',
+        content: '結構化溝通的核心法則：結論先行、以上統下、歸類分組、邏輯遞進。點選金字塔的每一層，深入了解各個原則。',
+        visualization: <PyramidPrinciple />
       }
     ]
   },

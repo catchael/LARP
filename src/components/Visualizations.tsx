@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Mic, PauseCircle, Activity } from 'lucide-react';
 import { cn } from '../types';
 import * as ort from 'onnxruntime-web';
+import { PyramidPrinciple } from './PyramidPrinciple';
 
 // We'll use the CDN version of VAD to avoid module resolution issues
 declare global {
@@ -766,25 +767,6 @@ export const SpeedChart = ({ data = [] }: { data?: { time: string; rate: number 
     <p className="text-center text-xs text-slate-500 mt-2">
       {data.length > 0 ? "這是您在上一頁測試時的語速變化" : "語速下降處通常是您強調重點的時刻"}
     </p>
-  </div>
-);
-
-export const CCCFlow = () => (
-  <div className="flex items-center justify-center gap-4 py-8">
-    <div className="flex flex-col items-center gap-2">
-      <div className="w-24 h-24 rounded-2xl bg-indigo-100 border-2 border-indigo-500 flex items-center justify-center text-indigo-700 font-bold">Context</div>
-      <span className="text-xs text-slate-500">背景</span>
-    </div>
-    <div className="h-0.5 w-8 bg-slate-300" />
-    <div className="flex flex-col items-center gap-2">
-      <div className="w-24 h-24 rounded-2xl bg-emerald-100 border-2 border-emerald-500 flex items-center justify-center text-emerald-700 font-bold">Core</div>
-      <span className="text-xs text-slate-500">核心</span>
-    </div>
-    <div className="h-0.5 w-8 bg-slate-300" />
-    <div className="flex flex-col items-center gap-2">
-      <div className="w-24 h-24 rounded-2xl bg-amber-100 border-2 border-amber-500 flex items-center justify-center text-amber-700 font-bold">Connect</div>
-      <span className="text-xs text-slate-500">連結</span>
-    </div>
   </div>
 );
 

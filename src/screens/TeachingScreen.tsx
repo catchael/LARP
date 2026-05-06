@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AppPhase, TeachingModule } from '../types';
 import { Mascot } from '../components/Mascot';
 import { LivePauseDemo, SpeedChart } from '../components/Visualizations';
+import { PyramidPrinciple } from '../components/PyramidPrinciple';
 
 interface TeachingScreenProps {
   activeModule: TeachingModule | null;
