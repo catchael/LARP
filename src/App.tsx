@@ -2209,27 +2209,17 @@ export default function App() {
         <TruthScreen
           onLeaveRoom={async () => {
             const currentScript = SCRIPTS.find((s: any) => s.id === roomState?.scriptId);
-            const scriptTitle = currentScript?.title || '劇本';
-            setLastPlayedScript(scriptTitle);
+            setLastPlayedScript(currentScript?.title || '劇本');
 
-            const myCharacterName = me?.assignedCharacter ?? '';
-
-            // 1. 給 save-dialogue 用 — 含 free + turn，所有人，按時間排序
-            const packagedDialogue: { speaker: string; text: string }[] = [];
-            for (const round of [1, 2] as const) {
-              const lines = transcriptHook.fullDialogueByRound(round);
-              if (lines.length > 0) {
-                packagedDialogue.push({ speaker: '系統', text: `【第${round === 1 ? '一' : '二'}輪討論】` });
-                packagedDialogue.push(...lines);
-              }
-            }
+            // 🗑️ 刪除這裡所有打包 packagedDialogue 與打 API 的舊程式碼
+            // 因為上方的 useEffect 已經第一時間幫我們處理好存檔與分析了！
 
             // 5. 才開始離開
             socket?.emit('leave_room');
             resetRoomState();
             setShowSurveyPrompt(true);
 
-            // 改成 3 秒備援刷新（以防 save-dialogue 還沒完成就已經看到空列表）
+            // 確保抓取到最新的紀錄列表
             if (user?.id) {
               setTimeout(() => fetchRecords(user.id), 3000);
             }

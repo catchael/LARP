@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { VenetianMask, Lock, User, ShieldAlert, Ghost, Search } from 'lucide-react';
 import { cn } from '../types';
@@ -17,6 +17,8 @@ export const GameEndingScreen: React.FC<GameEndingScreenProps> = ({
   isHost,
   onNextPhase,
 }) => {
+  const [isClicked, setIsClicked] = useState(false);
+  
   // 根據玩家身分與遊戲結果，決定要顯示的 UI 狀態
   const getScreenConfig = () => {
     // 1、真兇被投出：其他玩家畫面 (好人獲勝)
@@ -150,15 +152,23 @@ export const GameEndingScreen: React.FC<GameEndingScreenProps> = ({
             className="pt-8 relative z-10"
           >
             <button
-              onClick={onNextPhase}
+              onClick={() => {
+                if (isClicked) return;
+                setIsClicked(true);
+                if (onNextPhase) onNextPhase();
+              }}
+              disabled={isClicked}
               className={cn(
-                "px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all transform hover:scale-105 cursor-pointer",
+                "px-8 py-4 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all transform cursor-pointer",
+                !isClicked && "hover:scale-105", // 沒點擊前才有放大效果
+                isClicked && "opacity-50 cursor-not-allowed scale-95", // 點擊後變暗且縮小
                 isKillerCaught && !isKiller 
                   ? "bg-amber-900 text-amber-50 hover:bg-amber-800 shadow-xl shadow-amber-900/20" 
                   : "bg-white/20 text-white hover:bg-white/30 border border-white/30 backdrop-blur-md"
               )}
             >
-              <Search size={24} /> 進入真相大白環節
+              <Search size={24} className={isClicked ? "animate-pulse" : ""} /> 
+              {isClicked ? "進入中..." : "進入真相大白環節"}
             </button>
           </motion.div>
         </motion.div>
