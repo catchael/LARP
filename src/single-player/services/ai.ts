@@ -8,7 +8,7 @@ function getGroqClient() {
     if (!import.meta.env.VITE_GROQ_API_KEY) {
       throw new Error("Missing VITE_GROQ_API_KEY environment variable. 請檢查 .env 檔案。");
     }
-    // 直接用 Groq 官方的伺服器，不需要改 baseURL
+    // 直接用 Groq 官方的伺服器
     groqClient = new Groq({ 
       apiKey: import.meta.env.VITE_GROQ_API_KEY,
       dangerouslyAllowBrowser: true 
@@ -17,8 +17,30 @@ function getGroqClient() {
   return groqClient;
 }
 
+// 🌟 導出型別，解決 SinglePlayerApp.tsx 的找不到模組錯誤
+export interface PuzzleEvaluation {
+  passed: boolean;
+  score: number;
+  structureScore: number;
+  fluencyScore: number;
+  npcResponse: string;
+  coachFeedback: string[];
+  rewritten: string;
+}
+
 // 🌟 直接指定 Groq 官方支援的 Qwen 模型
 const MODEL_NAME = "qwen/qwen3-32b";
+
+// 🌟 補回 JSON 清洗工具，避免 JSON.parse 報錯
+function stripReasoning(text: string): string {
+  let cleaned = text.replace(/<think[\s\S]*?<\/think>/gi, '');
+  cleaned = cleaned.replace(/```json\n?|```/g, '');
+  const firstBracket = cleaned.search(/[\{\[]/);
+  if (firstBracket >= 0) {
+    cleaned = cleaned.slice(firstBracket);
+  }
+  return cleaned.trim();
+}
 
 export async function generateCustomFramework(userPrompt: string): Promise<Level> {
   const groq = getGroqClient();
@@ -69,23 +91,19 @@ export async function generateCustomFramework(userPrompt: string): Promise<Level
         }
       ],
       model: MODEL_NAME,
-      temperature: 0.6, // 推理模型建議溫度稍微調低一點，讓 JSON 結構更穩定
+      temperature: 0.7,
     });
 
     const text = response.choices[0]?.message?.content;
     if (!text) throw new Error("Failed to get content from Groq.");
 
-    // 使用清洗工具過濾資料
     const cleanedText = stripReasoning(text);
     const json = JSON.parse(cleanedText) as Level;
     json.id = 999;
     return json;
     
   } catch (e: any) {
-    console.error("Groq Custom Framework Error:", e);
-    if (e?.status === 429) {
-      throw new Error('Groq API 額度已耗盡 (Rate Limit Exceeded)。免費額度每分鐘上限為 12,000 Tokens，請稍等一分鐘後再試。');
-    }
+    console.error("Custom Framework Error:", e);
     throw new Error(`生成失敗: ${e?.message || '未知錯誤'}`);
   }
 }
@@ -128,7 +146,7 @@ ${irrelevantClues}
       messages: [
         { 
           role: "system", 
-          content: "你是一個專業的口語表達教練與 RPG NPC。請先在腦中思考，思考完畢後務必只輸出純 JSON 格式的字串。" 
+          content: "你是一個專業的口語表達教練與 RPG NPC。請務必只輸出純 JSON 格式的字串。" 
         },
         { 
           role: "user", 
@@ -136,21 +154,17 @@ ${irrelevantClues}
         }
       ],
       model: MODEL_NAME,
-      temperature: 0.6,
+      temperature: 0.7,
     });
 
     const text = response.choices[0]?.message?.content;
     if (!text) throw new Error("Failed to get content from Groq.");
 
-    // 使用清洗工具過濾資料
     const cleanedText = stripReasoning(text);
     return JSON.parse(cleanedText) as PuzzleEvaluation;
     
   } catch (e: any) {
-    console.error("Groq Evaluation Error:", e);
-    if (e?.status === 429) {
-      throw new Error('Groq API 額度已耗盡 (Rate Limit Exceeded)。免費額度每分鐘上限為 12,000 Tokens，請稍等一分鐘後再試。');
-    }
+    console.error("Evaluation Error:", e);
     throw new Error(`評估失敗: ${e?.message || '未知錯誤'}`);
   }
 }
