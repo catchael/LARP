@@ -399,8 +399,12 @@ export default function App() {
 
   // 🌟 進入 truth_revealed 時立刻儲存對話紀錄與觸發分析
   //    不依賴玩家是否按「離開房間」，確保關掉網頁也能留存資料
+  const hasSavedTruthRef = useRef(false);
   useEffect(() => {
     if (phase !== 'truth_revealed' || !user?.id) return;
+    // 🌟 防止重複執行（React StrictMode 或 phase 來回跳動）
+    if (hasSavedTruthRef.current) return;
+    hasSavedTruthRef.current = true;
 
     const currentScript = SCRIPTS.find((s: any) => s.id === roomState?.scriptId);
     const scriptTitle = currentScript?.title || '劇本';
@@ -524,6 +528,7 @@ export default function App() {
     setUnlockedCharacterAdvanced([]);
     setShowTieRevoteNotice(false);
     setIsKillerCaught(false);
+    hasSavedTruthRef.current = false; // 🌟 重置，下次遊戲可重新儲存
 
     // 4. 清理 WebRTC 連線與音效資源 (避免聽到上一個房間的聲音)
     Object.values(peerConnections.current).forEach((pc: any) => pc.close());
@@ -719,7 +724,11 @@ export default function App() {
       if (state.status === 'playing') {
         setIsGameStarted(true);
 
-        setPhase(state.phase);
+        // 🌟 修正：已進入 truth_revealed 的玩家，不因其他人離開觸發的 room_state 而退回 game_ending
+        setPhase(prev => {
+          if (prev === 'truth_revealed') return prev;
+          return state.phase;
+        });
         if (state.phaseEndTime) {
           const remaining = Math.max(0, Math.floor((state.phaseEndTime - Date.now()) / 1000));
           setTimeLeft(remaining);
@@ -734,7 +743,11 @@ export default function App() {
         }
       } else {
         setIsGameStarted(false);
-        setPhase(state.phase);
+        // 🌟 同上：truth_revealed 狀態不被 room_state 覆蓋
+        setPhase(prev => {
+          if (prev === 'truth_revealed') return prev;
+          return state.phase;
+        });
       }
       
       // 🌟 Initiate WebRTC calls in any voice-enabled phase (角色預覽開始就能通話)
