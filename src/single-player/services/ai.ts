@@ -115,7 +115,7 @@ export async function evaluatePuzzleSpeech(level: Level, transcript: string): Pr
   const irrelevantClues = level.clues.filter(c => !c.isRelevant).map(c => `- ${c.text}`).join('\n');
   
   const prompt = `你是一個結合了「沉浸式 RPG NPC」與「專業口語表達教練」的 AI。
-玩家正在遊玩一款「發聲解謎」的文字冒險遊戲。請嚴格評估玩家的口說轉換文字。
+玩家正在遊玩一款「發聲解謎」的文字冒險遊戲。請評估玩家的口說轉換文字。
 
 【當前關卡】：${level.title}
 【情境背景】：${level.scenario}
@@ -130,16 +130,19 @@ ${irrelevantClues}
 【玩家對 NPC 說出的話】：
 「${transcript}」
 
-請依據玩家的「邏輯結構」、「線索統整與過濾能力」、「說服力」、「語意流暢度」來評分。
+請依據玩家的發言來評分。⚠️【注意：本遊戲目前為寬鬆鼓勵模式，請大幅降低過關門檻】⚠️：
+1. 過關判定 (passed)：只要玩家「有嘗試針對目標發言」，且「提到至少一個關鍵線索」，就算邏輯稍微跳躍、語句不通順、或是語音辨識有錯字，都請判定成功 (passed: true)。
+2. 干擾線索的寬容：即使玩家不小心提到干擾線索，只要不是完全偏題，依然可以讓他們過關，NPC 可以稍微吐槽，但還是要推進劇情。
+3. 失敗判定：只有在玩家「完全沒有講話」、「發言內容與情境 100% 無關」或「徹底胡言亂語」時，才判定失敗 (passed: false)。
 
 請以 JSON 格式回傳，包含以下屬性：
-- passed (boolean): 是否說服成功
-- score (number): 綜合表現 (0-100)
+- passed (boolean): 是否說服成功 (請從寬認定)
+- score (number): 綜合表現 (0-100，給分請甜一點，過關基礎分至少 60)
 - structureScore (number): 邏輯結構與線索利用分數 (0-50)
 - fluencyScore (number): 表達流暢度分數 (0-50)
 - npcResponse (string): 以該情境中 NPC (${level.npcName}) 的口吻，對玩家的話做出沉浸式回應。
-- coachFeedback (array of strings): 作為口語教練，給出 2-4 點具體表達建議。
-- rewritten (string): 教練示範：如果是我，我會怎麼用更有邏輯來精鍊這段這段話？`;
+- coachFeedback (array of strings): 作為口語教練，給出 2-4 點具體表達建議。多給鼓勵，溫和地點出可以更好的地方。
+- rewritten (string): 教練示範：如果是我，我會怎麼精鍊這段話？`;
 
   try {
     const response = await groq.chat.completions.create({
