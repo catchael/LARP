@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Briefcase } from 'lucide-react';
 import { cn } from '../types';
 import { Evidence } from '../gameData';
+import { Search } from 'lucide-react';
+import { EVIDENCE_ICON_MAP } from './EvidenceModal'; // 或把 map 抽到共用檔
 
 interface BackpackProps {
   isBackpackOpen: boolean;
@@ -39,6 +41,9 @@ export const Backpack: React.FC<BackpackProps> = ({
         <div className="flex-1 flex flex-col gap-3 relative z-10 overflow-y-auto pr-2">
           {Array.from({ length: backpackCapacity }).map((_, index) => {
             const item = backpack[index];
+            const Icon = typeof item?.iconName === 'function'   // ← 加在這裡，注意 item 可能是 undefined
+              ? item.iconName
+              : EVIDENCE_ICON_MAP[item?.iconStringId ?? ''] ?? Search;
             return (
               <div
                 key={index}
@@ -53,7 +58,8 @@ export const Backpack: React.FC<BackpackProps> = ({
                 {item ? (
                   <div className="flex items-center gap-4 w-full">
                     <div className="w-12 h-12 rounded bg-slate-700 flex items-center justify-center shrink-0">
-                      <item.iconName size={24} className="text-slate-300" />
+                      <Icon size={24} className="text-slate-300" />
+
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-slate-200 truncate">{item.name}</div>

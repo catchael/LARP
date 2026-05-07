@@ -9,7 +9,7 @@ import {
 import { Evidence, ROOMS } from '../gameData';
 
 // 🌟 iconName 可能在 JSON 序列化後丟失函式參考，用字串 id 查表來兜底
-const EVIDENCE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+export const EVIDENCE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   search: Search, package: Package, bookOpen: BookOpen, fileText: FileText,
   mapPin: MapPin, tag: Tag,
   cs_mic: Mic, cs_old_news: Newspaper, cs_secret_compartment: Lock,
@@ -29,9 +29,11 @@ const EVIDENCE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; cla
 
 function resolveEvidenceIcon(evidence: any): React.ComponentType<{ size?: number; className?: string }> {
   if (typeof evidence?.iconName === 'function') return evidence.iconName;
-  if (typeof evidence?.iconName === 'string' && EVIDENCE_ICON_MAP[evidence.iconName]) {
-    return EVIDENCE_ICON_MAP[evidence.iconName];
-  }
+  const key: string | undefined =
+    typeof evidence?.iconStringId === 'string' ? evidence.iconStringId :
+    typeof evidence?.iconName === 'string'     ? evidence.iconName :
+    undefined;
+  if (key && EVIDENCE_ICON_MAP[key]) return EVIDENCE_ICON_MAP[key];
   return Search;
 }
 

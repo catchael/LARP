@@ -2,6 +2,8 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ShoppingCart, X, Briefcase, Eye } from 'lucide-react';
 import { Evidence } from '../gameData';
+import { Search } from 'lucide-react';
+import { EVIDENCE_ICON_MAP } from './EvidenceModal'; // 或把 map 抽到共用檔
 
 interface ShopModalProps {
   isShopOpen: boolean;
@@ -89,27 +91,33 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                     目前背包中沒有可解鎖深層線索的證物
                   </div>
                 ) : (
-                  backpack.filter(item => item.advancedDetails && !unlockedAdvancedDetails.includes(item.id)).map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-700">
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <item.iconName size={16} className="text-slate-400 shrink-0" />
-                        <span className="text-sm text-slate-300 truncate">{item.name}</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (coinCount >= 3) {
-                            setCoinCount(prev => prev - 3);
-                            setUnlockedAdvancedDetails(prev => [...prev, item.id]);
-                          }
-                        }}
-                        disabled={coinCount < 3}
-                        className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 shrink-0"
-                      >
-                        <span className="w-3 h-3 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center font-bold text-[8px]">$</span>
-                        3 解鎖
-                      </button>
-                    </div>
-                  ))
+                  backpack.filter(item => item.advancedDetails && !unlockedAdvancedDetails.includes(item.id))
+                    .map(item => {
+                      const Icon = typeof item.iconName === 'function'
+                        ? item.iconName
+                        : EVIDENCE_ICON_MAP[item.iconStringId ?? ''] ?? Search;
+                      return (
+                        <div key={item.id} className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-700">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <Icon size={16} className="text-slate-400 shrink-0" />
+                            <span className="text-sm text-slate-300 truncate">{item.name}</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (coinCount >= 3) {
+                                setCoinCount(prev => prev - 3);
+                                setUnlockedAdvancedDetails(prev => [...prev, item.id]);
+                              }
+                            }}
+                            disabled={coinCount < 3}
+                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 shrink-0"
+                          >
+                            <span className="w-3 h-3 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center font-bold text-[8px]">$</span>
+                            3 解鎖
+                          </button>
+                        </div>
+                      );
+                    })
                 )}
               </div>
             </div>
