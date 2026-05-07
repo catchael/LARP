@@ -372,15 +372,26 @@ export default function App() {
     currentRoundRef.current = (roomState as any)?.currentRound ?? 1;
   }, [roomState]);
 
+  // 🌟 新增一個 Ref 來記錄「上一個階段」，用來防堵 F5 刷新刷物資的 Bug
+  const prevPhaseRef = useRef<AppPhase>('login');
+
   // 🌟 每次進入搜查階段時清空當前背包、已撿金幣、已解鎖進階特徵（人物+證物）
   useEffect(() => {
     if (phase === 'game_search') {
-      setBackpack([]);
-      setCollectedCoins([]);
-      setUnlockedAdvancedDetails([]);
-    setUnlockedCharacterAdvanced([]);
-      setUnlockedCharacterAdvanced([]);
+      // 判斷是否為斷線重連或重新整理 (從 login 或 lobby 跳過來的)
+      const isReconnecting = prevPhaseRef.current === 'login' || prevPhaseRef.current === 'lobby';
+      
+      // 只有「正常遊戲流程」推進到搜查階段時，才清空背包
+      if (!isReconnecting) {
+        setBackpack([]);
+        setCollectedCoins([]);
+        setUnlockedAdvancedDetails([]);
+        setUnlockedCharacterAdvanced([]);
+      }
     }
+    
+    // 更新上一個階段的紀錄
+    prevPhaseRef.current = phase;
   }, [phase]);
 
   // 🌟 新增：當進入會議階段時，強制清空之前演出或搜查殘留的 STT 字幕

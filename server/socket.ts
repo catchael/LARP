@@ -233,7 +233,6 @@ export function registerSocketHandlers(io: Server) {
     const room = rooms.get(roomId)!;
     if (!room) return;
 
-    // 🌟 新增這行：先記住「切換前」的階段，用來打破死循環
     const previousPhase = room.phase;
 
     room.phase = phase;
@@ -242,40 +241,43 @@ export function registerSocketHandlers(io: Server) {
 
     if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
 
-    // 🌟 核心修正：判斷地圖階段的啟動邏輯
     if (phase === 'game_search') {
-      // 只有在「第一回合」且「不是剛從日記回來」的情況下，才演第二幕
       if (room.currentRound === 1 && previousPhase !== 'diary_reveal') {
         room.phaseEndTime = undefined;
-        const act2Id = `script${room.scriptId}_act2`;   // 動態抓取劇本幕
+        const act2Id = `script${room.scriptId}_act2`;
         room.currentActId = act2Id;
         room.currentActBeatIndex = 0;
         room.actBeatReady = new Set<string>();
         io.to(roomId).emit('act_started', { actId: act2Id, beatIndex: 0 });
       } else {
-        // 第二輪搜查，或是「剛看完日記回來」：不演戲，直接開始搜查倒數！
-        room.phaseEndTime = Date.now() + durationSeconds * 1000;
-        room.phaseTimeout = setTimeout(() => { autoNextPhase(roomId); }, durationSeconds * 1000);
+        // 🌟 修改這裡：支援 durationSeconds 為 0 就不倒數
+        if (durationSeconds > 0) {
+          room.phaseEndTime = Date.now() + durationSeconds * 1000;
+          room.phaseTimeout = setTimeout(() => { autoNextPhase(roomId); }, durationSeconds * 1000);
+        } else {
+          room.phaseEndTime = undefined;
+        }
       }
-    } else {
-      // 其他階段正常倒數計時
-      room.phaseEndTime = Date.now() + durationSeconds * 1000;
-      room.phaseTimeout = setTimeout(() => { autoNextPhase(roomId); }, durationSeconds * 1000);
-    }
-
-    if (phase === 'game_meeting') {
+    } else if (phase === 'game_meeting') {
       room.meetingStage = 'pre_round_organizing';
       room.meetingReadyUsers = new Set();
-      room.meetingUsers.forEach(u => u.isMicOn = false); // 全員先封麥
+      room.meetingUsers.forEach(u => u.isMicOn = false); 
 
       if (room.silenceCheckInterval) clearInterval(room.silenceCheckInterval);
       if (room.turnTimeout) clearTimeout(room.turnTimeout);
 
-      // 給予 2 分鐘 (120秒) 整理思緒時間，時間到自動進入輪流發言
       room.phaseEndTime = Date.now() + 120 * 1000;
       room.phaseTimeout = setTimeout(() => {
         startRoundRobin(roomId);
       }, 120 * 1000);
+    } else {
+      // 🌟 修改這裡：其他階段如果傳入 0 就不設定倒數
+      if (durationSeconds > 0) {
+        room.phaseEndTime = Date.now() + durationSeconds * 1000;
+        room.phaseTimeout = setTimeout(() => { autoNextPhase(roomId); }, durationSeconds * 1000);
+      } else {
+        room.phaseEndTime = undefined;
+      }
     }
 
     io.to(roomId).emit('room_state', getRoomState(roomId));
@@ -710,7 +712,7 @@ export function registerSocketHandlers(io: Server) {
         });
 
         io.to(currentRoomId).emit('game_started', { users: room.users });
-        startPhase(currentRoomId, 'character_preview', 60);
+        startPhase(currentRoomId, 'character_preview', 0);
       }
     });
 

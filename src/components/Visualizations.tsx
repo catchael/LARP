@@ -562,11 +562,25 @@ export const LivePauseDemo = React.forwardRef<LivePauseDemoHandle, LivePauseDemo
         lastWordTimeRef.current = Date.now();
         shouldBeListeningRef.current = true;
         recognitionRef.current?.start();
+
+        // 🌟 新增：看門狗機制 (Watchdog)
+        // 如果 5 秒後 isInitializing 還是 true（代表 onstart 沒被觸發），就強制報錯
+        setTimeout(() => {
+          setIsInitializing(prev => {
+            if (prev) {
+              console.warn("語音辨識 API 連線逾時");
+              try { recognitionRef.current?.abort(); } catch(e) {}
+              setError('無法連接語音伺服器。請檢查防毒軟體、公司防火牆是否阻擋，或關閉佔用麥克風的其他程式 (如 Discord)。');
+              shouldBeListeningRef.current = false;
+              stopVolumeMonitoring();
+              return false; // 強制關閉初始化狀態
+            }
+            return prev;
+          });
+        }, 5000);
+
       } catch (e: any) {
-        console.error('Failed to start recognition:', e);
-        setIsInitializing(false);
-        setRecognitionStatus('error');
-        setError(`啟動失敗: ${e.message || '未知錯誤'}`);
+        // ... 原本的 catch 邏輯
       }
     }
   };

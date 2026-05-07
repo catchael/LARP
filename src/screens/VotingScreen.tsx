@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle2, Lock, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Lock, AlertCircle, Clock } from 'lucide-react'; // 🌟 引入 Clock 圖示
 import { RoomState, User, cn } from '../types';
 import { SCRIPTS } from '../data/scripts';
 import { Socket } from 'socket.io-client';
@@ -18,21 +18,35 @@ export const VotingScreen: React.FC<VotingScreenProps> = ({
   user,
   socket,
 }) => {
-  // 紀錄玩家選中的角色名字
   const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
-  // 紀錄是否已經送出投票（送出後鎖定介面）
   const [hasVoted, setHasVoted] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null); // 🌟 新增計時器狀態
 
-  // 取得目前房間內有被分配到的角色清單
   const activeUsers = roomState?.users.filter(u => u.assignedCharacter) || [];
+
+  // 🌟 監聽房間狀態的結束時間，並啟動倒數計時
+  useEffect(() => {
+    if (!roomState?.phaseEndTime) return;
+    
+    const calculateTimeLeft = () => Math.max(0, Math.floor((roomState.phaseEndTime! - Date.now()) / 1000));
+    
+    // 初始化
+    setTimeLeft(calculateTimeLeft());
+
+    const interval = setInterval(() => {
+      const remaining = calculateTimeLeft();
+      setTimeLeft(remaining);
+      if (remaining <= 0) clearInterval(interval);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [roomState?.phaseEndTime]);
 
   const handleVoteSubmit = () => {
     if (!selectedCharacter || !socket) return;
     
-    // 再次確認
     if (window.confirm(`你確定要指認【${selectedCharacter}】為兇手嗎？投票後無法更改喔！`)) {
       setHasVoted(true);
-      // 發送投票結果給 Server
       socket.emit('submit_vote', { targetCharacter: selectedCharacter });
     }
   };
@@ -44,6 +58,23 @@ export const VotingScreen: React.FC<VotingScreenProps> = ({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[70] bg-slate-950 flex flex-col items-center justify-start overflow-y-auto pt-20 pb-10 px-6"
     >
+      {/* 🌟 新增：左上角計時器浮動面板 */}
+      {timeLeft !== null && (
+        <motion.div 
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="fixed top-6 left-6 z-[100] bg-slate-900/80 backdrop-blur-md border border-slate-700 px-5 py-2.5 rounded-full flex items-center gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.5)]"
+        >
+          <Clock className={timeLeft <= 30 ? "text-red-500 animate-pulse" : "text-indigo-400"} size={22} />
+          <span className={cn(
+            "font-mono font-bold text-xl tracking-widest",
+            timeLeft <= 30 ? "text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" : "text-white"
+          )}>
+            {Math.floor(timeLeft / 60).toString().padStart(2, '0')}:{ (timeLeft % 60).toString().padStart(2, '0') }
+          </span>
+        </motion.div>
+      )}
+
       {/* 標題區 */}
       <div className="text-center mb-12">
         <motion.h1 
@@ -60,9 +91,7 @@ export const VotingScreen: React.FC<VotingScreenProps> = ({
 
       {/* 角色卡片網格 */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-5xl mb-12">
-        {/* 🌟 修正：直接從劇本資料中抓取所有角色，不管有沒有真人扮演 */}
         {previewScript?.characters.map((charData) => {
-          // 找出這個角色是否有真人扮演 (為了顯示 "你自己" 標籤)
           const realUser = roomState?.users.find(u => u.assignedCharacter === charData.name);
           const isSelected = selectedCharacter === charData.name;
           const isMe = realUser?.email === user?.email;
@@ -83,29 +112,24 @@ export const VotingScreen: React.FC<VotingScreenProps> = ({
                   : "border-slate-800 hover:border-slate-600 bg-slate-900/50"
               )}
             >
-              {/* 角色頭像 */}
               <div className="aspect-square w-full relative">
                 <img 
-                  src={charData.image} // 直接使用劇本設定的圖片
+                  src={charData.image} 
                   alt={charData.name} 
                   className="w-full h-full object-cover bg-slate-800"
                 />
-                {/* 遮罩漸層 */}
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
               </div>
 
-              {/* 角色資訊 */}
               <div className="absolute bottom-0 w-full p-4 text-center">
                 <div className="text-xl font-bold text-white mb-1">
                   {charData.name}
                 </div>
-                {/* 顯示是不是自己 */}
                 {isMe && (
                   <span className="inline-block px-2 py-0.5 bg-slate-800 text-slate-300 text-xs rounded-full border border-slate-700 mt-1">
                     你自己
                   </span>
                 )}
-                {/* 可以順便標示 AI 託管 (選用) */}
                 {!realUser && (
                   <span className="inline-block px-2 py-0.5 bg-slate-800/50 text-slate-500 text-xs rounded-full border border-slate-700 mt-1">
                     無人扮演
@@ -113,7 +137,6 @@ export const VotingScreen: React.FC<VotingScreenProps> = ({
                 )}
               </div>
 
-              {/* 選中時的打勾圖示 */}
               {isSelected && !hasVoted && (
                 <div className="absolute top-3 right-3 text-red-500 bg-slate-900 rounded-full shadow-lg">
                   <CheckCircle2 size={32} />
