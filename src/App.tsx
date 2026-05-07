@@ -230,6 +230,17 @@ export default function App() {
   const roomStateRef = useRef<RoomState | null>(null);
   useEffect(() => { roomStateRef.current = roomState; }, [roomState]);
 
+  // 🌟 [修復 1] Ref 橋接：確保 Effect 能讀到最新資料，但不觸發 Effect 重新執行
+  const transcriptRef = useRef(transcriptHook);
+  useEffect(() => {
+    transcriptRef.current = transcriptHook;
+  }, [transcriptHook]);
+
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   // 🌟 累積這局所有發言
   const dialogueRef = useRef<{ speaker: string; text: string }[]>([]);
   const me = roomState?.users.find(u => u.email === user?.email);
@@ -256,6 +267,7 @@ export default function App() {
       // 🌟 在錄音開始那瞬間就鎖定回合
       const lockedRound = currentRoundRef.current;
       const lockedTimestamp = Date.now();
+      const lockedRoomId = roomStateRef.current?.id;
       const lockedPhase: 'turn' | 'free' = 
         (roomStateRef.current as any)?.meetingStage === 'free_discussion' ? 'free' : 'turn';
 
@@ -294,7 +306,14 @@ export default function App() {
           });
           const data = await res.json();
           console.log(`[STT] 收到回傳：${data.text?.length || 0} 字`);
+          
           if (data.success && data.text) {
+            // 🛑 [修復 2] 核心防禦：如果 STT 回來時已經不在同一個房間（例如已開新局或離開），直接丟棄！
+            if (lockedRoomId !== roomStateRef.current?.id) {
+              console.warn('[STT] 收到舊房間的延遲語音，已丟棄以防污染新遊戲');
+              return;
+            }
+
             subtitlesHook.appendFinal(data.text);
             dialogueRef.current.push({ speaker: myCharName, text: data.text });
             transcriptHook.append({
@@ -411,23 +430,30 @@ export default function App() {
     }
   }, [(roomState as any)?.meetingStage]);
 
-  // 🌟 進入 truth_revealed 時立刻儲存對話紀錄與觸發分析
-  //    不依賴玩家是否按「離開房間」，確保關掉網頁也能留存資料
+  // 🌟 進入 truth_revealed 時立刻儲存對話紀錄與觸發分析，不依賴玩家是否按「離開房間」，確保關掉網頁也能留存資料
   const hasSavedTruthRef = useRef(false);
   useEffect(() => {
-    if (phase !== 'truth_revealed' || !user?.id) return;
-    // 🌟 防止重複執行（React StrictMode 或 phase 來回跳動）
+    // 透過 Ref 取得最新狀態，確保讀取到的是「當下最新」的資料快照
+    const currentUser = userRef.current;
+    const currentTranscript = transcriptRef.current;
+    const currentRoom = roomStateRef.current;
+
+    // 防禦機制：非真相大白階段、或使用者未登入時不執行
+    if (phase !== 'truth_revealed' || !currentUser?.id) return;
+    
+    // 防止重複執行（React StrictMode 或相鄰的 State 變動可能觸發兩次）
     if (hasSavedTruthRef.current) return;
     hasSavedTruthRef.current = true;
 
-    const currentScript = SCRIPTS.find((s: any) => s.id === roomState?.scriptId);
+    // 取得當前劇本資訊與玩家角色名稱
+    const currentScript = SCRIPTS.find((s: any) => s.id === currentRoom?.scriptId);
     const scriptTitle = currentScript?.title || '劇本';
-    const myCharacterName = roomState?.users.find((u: any) => u.email === user.email)?.assignedCharacter ?? '';
+    const myCharacterName = currentRoom?.users.find((u: any) => u.email === currentUser.email)?.assignedCharacter ?? '';
 
-    // 完整對話（含所有人、含 free + turn）
+    // 1. 整理全場完整對話紀錄（含系統訊息與各輪討論）
     const packagedDialogue: { speaker: string; text: string }[] = [];
     for (const round of [1, 2] as const) {
-      const lines = transcriptHook.fullDialogueByRound(round);
+      const lines = currentTranscript.fullDialogueByRound(round);
       if (lines.length > 0) {
         packagedDialogue.push({ speaker: '系統', text: `【第${round === 1 ? '一' : '二'}輪討論】` });
         packagedDialogue.push(...lines);
@@ -435,58 +461,81 @@ export default function App() {
     }
 
     console.log('[truth_revealed] packagedDialogue:', packagedDialogue.length, 'entries');
-    console.log('[truth_revealed] transcriptHook entries:', transcriptHook.entries.length);
-    console.log('[truth_revealed] myCharacterName:', myCharacterName);
+    console.log('[truth_revealed] transcriptHook entries:', currentTranscript.entries.length);
 
-    // 儲存劇本對話紀錄
+    // 2. 儲存對話紀錄至後端資料庫
     if (packagedDialogue.length > 0) {
       fetch('/api/save-dialogue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, scriptName: scriptTitle, dialogue: packagedDialogue }),
-      }).then(() => fetchRecords(user.id)).catch(e => console.error('save-dialogue failed', e));
+        body: JSON.stringify({ 
+          userId: currentUser.id, 
+          scriptName: scriptTitle, 
+          dialogue: packagedDialogue 
+        }),
+      })
+      .then(() => fetchRecords(currentUser.id)) // 儲存成功後更新本地紀錄列表
+      .catch(e => console.error('[Truth] 儲存對話失敗:', e));
     }
 
-    // 觸發 AI 分析
+    // 3. 提取玩家個人的發言片段（僅取輪流發言階段，排除自由討論的破碎語音）
     const myTurns: string[] = [];
     for (const round of [1, 2]) {
-      const myLines = transcriptHook.turnsByRoundForCharacter(round, myCharacterName);
+      const myLines = currentTranscript.turnsByRoundForCharacter(round, myCharacterName);
       if (myLines.length > 0) {
         myTurns.push(`[第${round === 1 ? '一' : '二'}輪]\n${myLines.join('\n')}`);
       }
     }
 
+    // 4. 若玩家有發言紀錄，則發送 AI 分析請求
     if (myTurns.length > 0) {
       setAnalyzingState('analyzing');
+      
       fetch('/api/analyse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id,
+          userId: currentUser.id,
           scriptName: scriptTitle,
           turns: myTurns,
           fullDialogue: packagedDialogue,
           targetCharacter: myCharacterName,
         }),
-      }).then(r => r.json()).then(data => {
+      })
+      .then(r => r.json())
+      .then(data => {
         if (data.jobId) {
+          // 啟動輪詢計時器，檢查分析進度
           const pollInterval = setInterval(async () => {
-            const statusRes = await fetch(`/api/analyse/status/${data.jobId}?userId=${user.id}`);
-            const statusData = await statusRes.json();
-            if (statusData.status === 'done') {
-              clearInterval(pollInterval);
-              setAnalyzingState('ready');
-              setReadyReport({ summary: statusData.result.summary, turns: statusData.result.turns });
-              fetchRecords(user.id);
-            } else if (statusData.status === 'error') {
-              clearInterval(pollInterval);
-              setAnalyzingState('idle');
+            try {
+              const statusRes = await fetch(`/api/analyse/status/${data.jobId}?userId=${currentUser.id}`);
+              const statusData = await statusRes.json();
+              
+              if (statusData.status === 'done') {
+                clearInterval(pollInterval);
+                setAnalyzingState('ready');
+                setReadyReport({ 
+                  summary: statusData.result.summary, 
+                  turns: statusData.result.turns 
+                });
+                fetchRecords(currentUser.id); // 分析完成後再次更新紀錄，確保報告出現在列表
+              } else if (statusData.status === 'error') {
+                clearInterval(pollInterval);
+                setAnalyzingState('idle');
+                console.error('[Analysis] AI 分析任務回傳錯誤');
+              }
+            } catch (pollErr) {
+              console.error('[Analysis] 輪詢分析狀態失敗:', pollErr);
             }
-          }, 5000);
+          }, 5000); // 每 5 秒檢查一次
         }
-      }).catch(e => { console.error('analyse failed', e); setAnalyzingState('idle'); });
+      })
+      .catch(e => {
+        console.error('[Analysis] 發送分析請求失敗:', e);
+        setAnalyzingState('idle');
+      });
     }
-  }, [phase]); // 只在 phase 變化時觸發，不重複執行
+  }, [phase]); // 🌟 僅依賴 phase 變動，Transcript 的更新由 Ref 處理
 
   const resetRoomState = () => {
 
@@ -524,6 +573,7 @@ export default function App() {
     setHasLoadedScriptTimeline(false);
     setTimelineEvents({});
     setCharacterNotes([]);
+    dialogueRef.current = [];
     subtitlesHook.reset(['系統：歡迎來到會議室，請開始討論。']);
     transcriptHook.reset();
     setMeetingTab('clues');
