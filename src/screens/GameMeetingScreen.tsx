@@ -1270,7 +1270,11 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                       <div className="p-6 overflow-y-auto h-full [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full">
                         <div className="flex items-start gap-4 mb-6 pb-5 border-b border-slate-700">
                            <div className="p-3.5 bg-indigo-500/20 rounded-2xl text-indigo-400 shrink-0">
-                              {selectedEvidence.iconName ? React.createElement(selectedEvidence.iconName as any, { size: 28 }) : <Search size={28} />}
+                              {/* 使用你已經寫好的 resolveEvidenceIcon */}
+                              {(() => {
+                                const Icon = resolveEvidenceIcon(selectedEvidence);
+                                return <Icon size={28} />;
+                              })()}
                            </div>
                            <div>
                              <h3 className="text-xl font-bold text-white mb-2">{selectedEvidence.name}</h3>

@@ -1,7 +1,39 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { X, Eye } from 'lucide-react';
+import { X, Eye, Search, BookOpen, FileText, MapPin, Tag, Package } from 'lucide-react';
+import {
+  Mic, Newspaper, Lock, Footprints, Skull, Cigarette, Droplets,
+  Laptop, Cable, Wrench, GlassWater, Umbrella, Smartphone,
+  Crosshair, Shirt, Bandage, Camera, Waves, Mountain,
+} from 'lucide-react';
 import { Evidence, ROOMS } from '../gameData';
+
+// 🌟 iconName 可能在 JSON 序列化後丟失函式參考，用字串 id 查表來兜底
+const EVIDENCE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  search: Search, package: Package, bookOpen: BookOpen, fileText: FileText,
+  mapPin: MapPin, tag: Tag,
+  cs_mic: Mic, cs_old_news: Newspaper, cs_secret_compartment: Lock,
+  es_locked_door: Lock, cs_drag_marks: Footprints, cs_shoeprint: Footprints,
+  es_muddy_steps: Footprints, pv_footprints: Footprints, ls_slip_marks: Footprints,
+  cs_autopsy: Skull, pv_autopsy: Skull, dp_cigarette_butt: Cigarette,
+  cv_cigarettes: Cigarette, sk_wet_sink: Droplets, ws_sink_clean: Droplets,
+  cg_sink: Droplets, lk_laptop: Laptop, lk_rope: Cable, pv_rope: Cable,
+  es_plastic_part: Package, lk_plastic_bags: Package, bp_backpack: Package,
+  np_disposal_list: FileText, np_old_proposal: FileText, bp_business_card: FileText,
+  ws_pi_card: FileText, cg_metal_debris: Wrench, dp_water_bottle: GlassWater,
+  pv_black_umbrella: Umbrella, ws_big_umbrella: Umbrella, ws_metal_umbrella: Umbrella,
+  bp_phone: Smartphone, bp_gun: Crosshair, bp_lawbooks: BookOpen,
+  ws_fabric: Shirt, cg_medical: Bandage, cg_cctv: Camera,
+  bp_swimwear: Waves, ls_sand_compare: Mountain,
+};
+
+function resolveEvidenceIcon(evidence: any): React.ComponentType<{ size?: number; className?: string }> {
+  if (typeof evidence?.iconName === 'function') return evidence.iconName;
+  if (typeof evidence?.iconName === 'string' && EVIDENCE_ICON_MAP[evidence.iconName]) {
+    return EVIDENCE_ICON_MAP[evidence.iconName];
+  }
+  return Search;
+}
 
 interface EvidenceModalProps {
   selectedEvidence: Evidence | null;
@@ -36,7 +68,7 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
   const isViewing = !!viewingEvidence;
 
   if (!item) return null;
-  const Icon = item.iconName;
+  const Icon = resolveEvidenceIcon(item); // 🌟 用安全的方式取得 icon，防止序列化後炸裂
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -80,7 +112,13 @@ export const EvidenceModal: React.FC<EvidenceModalProps> = ({
               <button
                 onClick={() => {
                   if (backpack.length < backpackCapacity) {
-                    const enrichedItem = { ...item, locationId: activeSearchRoomId || undefined, locationName: activeSearchRoomId ? ROOMS[scriptId]?.[activeSearchRoomId]?.name : undefined };
+                    const enrichedItem = { 
+                      ...item, 
+                      locationId: activeSearchRoomId || undefined, 
+                      locationName: (activeSearchRoomId && ROOMS[scriptId] && ROOMS[scriptId][activeSearchRoomId]) 
+                                    ? ROOMS[scriptId][activeSearchRoomId].name 
+                                    : "未知區域" 
+                    };
                     setBackpack([...backpack, enrichedItem]);
                     setAllCollectedEvidence(prev => {
                       if (prev.some(e => e.id === item.id)) return prev;

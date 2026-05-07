@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   MapPin,
+  Package,
   Plus,
   Search,
   Tag,
@@ -29,6 +30,39 @@ import {
 } from '../data/narrations';
 import { CHARACTER_PROFILES } from '../data/profileContent';
 import { DIARY_CONTENT } from '../data/diaryContent';
+import {
+  Mic, Newspaper, Lock, Footprints, Skull, Cigarette, Droplets,
+  Laptop, Cable, Wrench, GlassWater, Umbrella, Smartphone,
+  Crosshair, Shirt, Bandage, Camera, Waves, Mountain,
+} from 'lucide-react';
+
+// 🌟 與 GameMeetingScreen 一致的 icon 查表
+// 用於處理 iconName 被 JSON 序列化（斷線重連/save_player_state）後丟失函式參考的問題
+const EVIDENCE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  search: Search, package: Package, bookOpen: BookOpen, fileText: FileText,
+  mapPin: MapPin, tag: Tag,
+  cs_mic: Mic, cs_old_news: Newspaper, cs_secret_compartment: Lock,
+  es_locked_door: Lock, cs_drag_marks: Footprints, cs_shoeprint: Footprints,
+  es_muddy_steps: Footprints, pv_footprints: Footprints, ls_slip_marks: Footprints,
+  cs_autopsy: Skull, pv_autopsy: Skull, dp_cigarette_butt: Cigarette,
+  cv_cigarettes: Cigarette, sk_wet_sink: Droplets, ws_sink_clean: Droplets,
+  cg_sink: Droplets, lk_laptop: Laptop, lk_rope: Cable, pv_rope: Cable,
+  es_plastic_part: Package, lk_plastic_bags: Package, bp_backpack: Package,
+  np_disposal_list: FileText, np_old_proposal: FileText, bp_business_card: FileText,
+  ws_pi_card: FileText, cg_metal_debris: Wrench, dp_water_bottle: GlassWater,
+  pv_black_umbrella: Umbrella, ws_big_umbrella: Umbrella, ws_metal_umbrella: Umbrella,
+  bp_phone: Smartphone, bp_gun: Crosshair, bp_lawbooks: BookOpen,
+  ws_fabric: Shirt, cg_medical: Bandage, cg_cctv: Camera,
+  bp_swimwear: Waves, ls_sand_compare: Mountain,
+};
+
+function resolveEvidenceIcon(evidence: any): React.ComponentType<{ size?: number; className?: string }> {
+  if (typeof evidence?.iconName === 'function') return evidence.iconName;
+  if (typeof evidence?.iconName === 'string' && EVIDENCE_ICON_MAP[evidence.iconName]) {
+    return EVIDENCE_ICON_MAP[evidence.iconName];
+  }
+  return Search; // 兜底
+}
 interface NotebookModalProps {
   isNotebookOpen: boolean;
   setIsNotebookOpen: (v: boolean) => void;
@@ -600,7 +634,9 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
           const myCharacterName = myUser?.assignedCharacter || '';
           
           // 🌟 改：用 scriptId 雙層 key 抓
-          const myProfile = CHARACTER_PROFILES[currentScriptId]?.[myCharacterName];
+          const myProfile = (currentScriptId && myCharacterName) 
+            ? CHARACTER_PROFILES[currentScriptId]?.[myCharacterName] 
+            : null;
 
           // 🌟 2. 動態載入對應序章
           const prologueData = currentScriptId === 2 ? NARRATIONS_SCRIPT2_PROLOGUE : NARRATIONS_SCRIPT1_PROLOGUE;
@@ -763,7 +799,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
                     className={cn("p-3 border rounded-lg cursor-pointer transition-all flex items-center gap-3", notebookSelectedEvidence?.id === item.id ? "bg-indigo-50 border-indigo-300 shadow-sm" : "bg-white border-slate-200 hover:border-indigo-300 hover:shadow-sm")}
                   >
                     <div className="w-10 h-10 bg-slate-100 rounded flex items-center justify-center text-slate-600 shrink-0">
-                      <item.iconName size={20} />
+                      {(() => { const Icon = resolveEvidenceIcon(item); return <Icon size={20} />; })()}
                     </div>
                     <div className="min-w-0">
                       <div className="font-bold text-sm truncate">{item.name}</div>
@@ -785,7 +821,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
                 <div className="space-y-6">
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center text-slate-700 border border-slate-200 shrink-0">
-                      <notebookSelectedEvidence.iconName size={32} />
+                      {(() => { const Icon = resolveEvidenceIcon(notebookSelectedEvidence); return <Icon size={32} />; })()}
                     </div>
                     <div>
                       <h3 className="text-2xl font-bold text-slate-800">{notebookSelectedEvidence.name}</h3>
