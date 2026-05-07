@@ -223,7 +223,7 @@ export class LARPEngine {
       true,
       MODELS.P_JUDGE,
       3,
-      4096,
+      8192,
     );
 
     return {
