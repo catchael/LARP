@@ -49,8 +49,8 @@ type AppPhase =
   | 'script_lobby' | 'script_detail' | 'room_lobby'
   | 'character_preview' | 'game_profile' | 'mission_briefing'
   | 'diary_reveal'
-  | 'game_search' | 'search_end' | 'game_meeting' | 'game_voting'
-  | 'game_ending' | 'truth_revealed';
+  | 'game_search' | 'search_end' | 'game_meeting' | 'self_reflection' 
+  | 'game_voting' | 'game_ending' | 'truth_revealed';
 
 interface Room {
   id: string;
