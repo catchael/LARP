@@ -4,7 +4,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Mic, PauseCircle, Activity } from 'lucide-react';
 import { cn } from '../types';
 import * as ort from 'onnxruntime-web';
-import { PyramidPrinciple } from './PyramidPrinciple';
 
 // We'll use the CDN version of VAD to avoid module resolution issues
 declare global {

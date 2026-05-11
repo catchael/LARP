@@ -26,6 +26,7 @@ import { MissionBriefingScreen } from './screens/MissionBriefingScreen';
 import { GameSearchScreen } from './screens/GameSearchScreen';
 import { SearchEndScreen } from './screens/SearchEndScreen';
 import { GameMeetingScreen, CharacterNote } from './screens/GameMeetingScreen';
+import { SelfReflectionScreen } from './screens/SelfReflectionScreen';
 import { ActScreen } from './screens/ActScreen';
 import { VotingScreen } from './screens/VotingScreen';
 import { VoteRevealScreen } from './screens/VoteRevealScreen';
@@ -2224,6 +2225,18 @@ export default function App() {
             evidenceAssociations={evidenceAssociations}
             unlockedAdvancedDetails={unlockedAdvancedDetails}
             unlockedCharacterAdvanced={unlockedCharacterAdvanced}
+          />
+        )}
+
+        {phase === 'self_reflection' && (
+          <SelfReflectionScreen
+            key="self_reflection"
+            transcript={transcriptHook.ordered}
+            clues={allCollectedEvidence}
+            onComplete={(data: any) => { // 🌟 加入 : any 解決 "Parameter 'data' implicitly has an any type"
+              socket?.emit('submit_reflection', data);
+              socket?.emit('player_ready'); 
+            }}
           />
         )}
       </AnimatePresence>
