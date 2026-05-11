@@ -1187,9 +1187,12 @@ export function registerSocketHandlers(io: Server) {
               startVotingPromptStage(currentRoomId);
             }
           } else if (room.meetingStage === 'free_discussion') {
-            if (room.currentRound === 1) {
+            // 改成：
+            if (room.scriptId === 2) {
+              startPhase(currentRoomId, 'self_reflection', 0);
+            } else if (room.currentRound === 1) {
               const next = getNextRoundStartPhase(room.scriptId);
-              room.currentRound = 2; // 統一將回合 +1
+              room.currentRound = 2;
               startPhase(currentRoomId, next.phase, next.duration);
             } else {
               startPhase(currentRoomId, 'game_voting', 180);
