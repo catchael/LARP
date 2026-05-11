@@ -68,6 +68,7 @@ export interface MeetingUser {
 export interface RoomState {
   id: string;
   scriptId: number;
+  currentRound: number;
   users: RoomUser[];
   status: 'waiting' | 'playing';
   assignmentMethod: 'random' | 'manual';

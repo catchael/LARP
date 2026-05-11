@@ -8,7 +8,7 @@ import { Evidence } from '../gameData';
 import { cn } from '../types';
 
 interface SelfReflectionProps {
-  transcript: any[];
+  transcript: string[];
   clues: Evidence[]; // 這裡接收 App 傳來的 allCollectedEvidence
   onComplete: (data: any) => void;
 }
@@ -65,6 +65,15 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
           <h3 className="text-2xl font-bold text-white">結構連貫性檢核 (RST)</h3>
           <p className="text-slate-400">請嘗試將你的發言進行「遞迴式向上建構」。</p>
         </div>
+
+        {transcript.length > 0 && (
+          <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4 max-h-40 overflow-y-auto">
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">你的發言紀錄</p>
+            {transcript.map((line, i) => (
+              <p key={i} className="text-sm text-slate-300 mb-1">{line}</p>
+            ))}
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">

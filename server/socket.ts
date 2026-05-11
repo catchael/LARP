@@ -369,10 +369,12 @@ export function registerSocketHandlers(io: Server) {
     if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
     room.phaseEndTime = Date.now() + 300 * 1000;
     room.phaseTimeout = setTimeout(() => { 
-      if (room.currentRound === 1) {
-        // 🌟 自由討論結束，進入下一回合
+      if (room.scriptId === 2) {
+        // 劇本 2：每次自由討論結束先進 self_reflection
+        startPhase(roomId, 'self_reflection', 0);
+      } else if (room.currentRound === 1) {
         const next = getNextRoundStartPhase(room.scriptId);
-        room.currentRound = 2; // 統一將回合 +1
+        room.currentRound = 2;
         startPhase(roomId, next.phase, next.duration);
       } else {
         startPhase(roomId, 'game_voting', 180);
@@ -732,10 +734,18 @@ export function registerSocketHandlers(io: Server) {
         io.to(currentRoomId).emit('room_state', getRoomState(currentRoomId));
 
         if (room.readyUsers.size >= playingCount) {
-          if (room.phase === 'diary_reveal') {
+          // ✅ 加在這裡，在 diary_reveal 的 if 前面：
+          if (room.phase === 'self_reflection') {
             if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
-            // 🌟 劇本 2：看完日記後，回到第一次的搜查階段並開始 300 秒倒數
-            // 注意：這裡不改變 currentRound，依然是 1
+            if (room.currentRound === 1) {
+              const next = getNextRoundStartPhase(room.scriptId);
+              room.currentRound = 2;
+              startPhase(currentRoomId, next.phase, next.duration);
+            } else {
+              startPhase(currentRoomId, 'game_voting', 180);
+            }
+          } else if (room.phase === 'diary_reveal') {  // ← 原本的 if 改成 else if
+            if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
             startPhase(currentRoomId, 'game_search', 300);
           } else {
             autoNextPhase(currentRoomId);

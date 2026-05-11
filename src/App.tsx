@@ -2231,7 +2231,11 @@ export default function App() {
         {phase === 'self_reflection' && (
           <SelfReflectionScreen
             key="self_reflection"
-            transcript={transcriptHook.ordered}
+            transcript={(() => {
+              const round = roomState?.currentRound ?? 1;
+              const myChar = roomState?.users.find(u => u.email === user?.email)?.assignedCharacter ?? '';
+              return transcriptHook.turnsByRoundForCharacter(round, myChar);
+            })()}
             clues={allCollectedEvidence}
             onComplete={(data: any) => { // 🌟 加入 : any 解決 "Parameter 'data' implicitly has an any type"
               socket?.emit('submit_reflection', data);
