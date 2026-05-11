@@ -354,7 +354,7 @@ export function registerSocketHandlers(io: Server) {
     room.phaseEndTime = Date.now() + 30 * 1000;
     room.phaseTimeout = setTimeout(() => {
       // 🌟 時間到沒人按，直接進入最終投票
-      startPhase(roomId, 'game_voting', 180);
+      startPhase(roomId, 'self_reflection', 240);
     }, 30 * 1000);
 
     io.to(roomId).emit('room_state', getRoomState(roomId));
@@ -1226,7 +1226,7 @@ export function registerSocketHandlers(io: Server) {
           if (wantsMore) {
             startFreeDiscussion(currentRoomId);
           } else {
-            startPhase(currentRoomId, 'game_voting', 180);
+            startPhase(currentRoomId, 'self_reflection', 240);
           }
         }
       }
