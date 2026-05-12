@@ -472,7 +472,7 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
           {!isHelperPanelOpen && Number(roomState?.scriptId) === 2 && (
             <button
               onClick={() => setIsHelperPanelOpen(true)}
-              className="absolute bottom-0 left-1/2 -translate-x-1/2 bg-slate-800 hover:bg-indigo-600 border border-b-0 border-slate-600 text-slate-300 hover:text-white py-1.5 px-6 rounded-t-xl shadow-[0_-5px_15px_rgba(0,0,0,0.3)] z-[50] transition-all flex items-center justify-center gap-2 group border-t-2 border-t-indigo-500"
+              className="absolute bottom-0 left-1/2 -translate-x-1/2 bg-[#f5ede2] hover:bg-[#ede0d0] border border-b-0 border-[#d8c4b0] text-[#3d2810] py-2.5 px-8 rounded-t-xl shadow-[0_-5px_15px_rgba(0,0,0,0.3)] z-[50] transition-all flex items-center justify-center gap-2 group border-t-2 border-t-indigo-500"
               title="展開發言助手"
             >
               <ChevronUp size={20} className="group-hover:-translate-y-1 transition-transform" />
