@@ -712,26 +712,42 @@ export default function App() {
   };
 
   const handleUnlockCharacterAdvanced = (characterName: string) => {
-    setUnlockedCharacterAdvanced(prev => [...prev, characterName]);
-    
-    // ✅ 補上這段：同步寫入筆記
-    const charIdx = previewScript?.characters.findIndex(c => c.name === characterName) ?? -1;
-    if (charIdx === -1) return;
-    const traits = CHARACTER_TRAITS[scriptIdRef.current]?.[characterName];
-    if (!traits) return;
-    const title = `[進階特徵] ${characterName}`;
+    // 取得當前劇本 ID 與回合數
+    const currentScriptId = scriptIdRef.current; //
+    const currentRound = (roomState as any)?.currentRound || 1; //
 
-    setCharacterNotes(prev => {
-      if (prev.some(n => n.charIdx === charIdx && n.title === title)) return prev;
-      return [...prev, {
-        id: Date.now().toString(),
-        charIdx,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        title,
-        text: traits.advanced,
-        clueId: ''
-      }];
+    // 檢查是否已達到本輪解鎖上限（一輪限一人）
+    if (unlockedCharacterAdvanced.length >= currentRound) {
+      alert(`本輪解鎖名額已達上限（${currentRound}人），請等下一輪再解鎖其他角色。`);
+      return;
+    }
+
+    // 執行解鎖
+    setUnlockedCharacterAdvanced(prev => {
+      if (prev.includes(characterName)) return prev;
+      return [...prev, characterName];
     });
+    
+    // 取得角色索引與資料並自動寫入筆記
+    const script = SCRIPTS.find(s => s.id === currentScriptId);
+    const charIdx = script?.characters.findIndex(c => c.name === characterName) ?? -1;
+    const traits = CHARACTER_TRAITS[currentScriptId]?.[characterName];
+
+    if (charIdx !== -1 && traits) {
+      const title = `[進階特徵] ${characterName}`;
+      setCharacterNotes(prev => {
+        // 防止重複寫入相同標題的筆記
+        if (prev.some(n => n.charIdx === charIdx && n.title === title)) return prev;
+        return [...prev, {
+          id: `trait-adv-${characterName}-${Date.now()}`,
+          charIdx,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          title,
+          text: traits.advanced,
+          clueId: ''
+        }];
+      });
+    }
   };
 
   // Socket Management
@@ -1909,6 +1925,7 @@ export default function App() {
       onUnlockAdvanced={handleUnlockCharacterAdvanced}
       allCharacterNames={previewScript?.characters.map((c: any) => c.name) ?? []}
       scriptId={roomState?.scriptId ?? 1}
+      currentRound={(roomState as any)?.currentRound || 1}
     />
   );
 

@@ -4,7 +4,6 @@ import { ShoppingCart, X, Briefcase, Eye, Users } from 'lucide-react';
 import { Evidence } from '../gameData';
 import { Search } from 'lucide-react';
 import { EVIDENCE_ICON_MAP } from './EvidenceModal'; // 或把 map 抽到共用檔
-import { CHARACTER_TRAITS } from '../data/characterTraits';
 
 interface ShopModalProps {
   isShopOpen: boolean;
@@ -20,6 +19,7 @@ interface ShopModalProps {
   onUnlockAdvanced: (characterName: string) => void;
   allCharacterNames: string[];
   scriptId: number;
+  currentRound: number;
 }
 
 export const ShopModal: React.FC<ShopModalProps> = ({
@@ -36,6 +36,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
   onUnlockAdvanced,
   allCharacterNames,
   scriptId,
+  currentRound,
 }) => {
   const [toast, setToast] = useState<string | null>(null);
 
@@ -93,6 +94,40 @@ export const ShopModal: React.FC<ShopModalProps> = ({
               </button>
             </div>
 
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 flex flex-col">
+              <div className="w-12 h-12 bg-amber-900/50 text-amber-400 rounded-lg flex items-center justify-center mb-4 border border-amber-500/30">
+                <Users size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">角色進階特徵</h3>
+              <p className="text-slate-400 text-sm mb-4 flex-1">
+                洞察其他偵探的背景細節。本輪剩餘名額：
+                <span className="text-amber-400 font-bold ml-1">
+                  {Math.max(0, currentRound - unlockedCharacters.length)}
+                </span>
+              </p>
+              
+              <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2">
+                {allCharacterNames
+                  .filter(name => !unlockedCharacters.includes(name))
+                  .map(name => (
+                    <div key={name} className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-700">
+                      <span className="text-sm text-slate-300">{name}</span>
+                      <button
+                        onClick={() => {
+                          // 呼叫 App.tsx 的邏輯（內部已含一輪一人限制檢查）
+                          onUnlockAdvanced(name);
+                          // 解鎖成功後顯示指定提示
+                          showToast(`✅ 已解鎖，可在 [筆記本-角色檔案]-${name} 處查看`);
+                        }}
+                        className="px-4 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded transition-colors"
+                      >
+                        免費解鎖
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
             {/* Advanced Details Unlock */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 flex flex-col">
               <div className="w-12 h-12 bg-emerald-900/50 text-emerald-400 rounded-lg flex items-center justify-center mb-4 border border-emerald-500/30">
@@ -122,7 +157,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({
                               if (coinCount >= 3) {
                                 setCoinCount(prev => prev - 3);
                                 setUnlockedAdvancedDetails(prev => [...prev, item.id]);
-                                showToast('✅ 深層線索已解鎖，可在筆記本－[背包]標籤處查看');
+                                showToast('✅ 深層線索已解鎖，可在筆記本－[背包]標籤，點選證物查看');
                               }
                             }}
                             disabled={coinCount < 3}
