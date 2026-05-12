@@ -10,6 +10,7 @@ import { useTranscript } from './hooks/useTranscript';
 // Data
 import { SCRIPTS } from './data/scripts';
 import { DIARY_CONTENT } from './data/diaryContent';
+import { CHARACTER_TRAITS } from './data/characterTraits';
 
 // Screens
 import { LoginScreen } from './screens/LoginScreen';
@@ -711,9 +712,26 @@ export default function App() {
   };
 
   const handleUnlockCharacterAdvanced = (characterName: string) => {
-    setUnlockedCharacterAdvanced(prev =>
-      prev.includes(characterName) ? prev : [...prev, characterName]
-    );
+    setUnlockedCharacterAdvanced(prev => [...prev, characterName]);
+    
+    // ✅ 補上這段：同步寫入筆記
+    const charIdx = previewScript?.characters.findIndex(c => c.name === characterName) ?? -1;
+    if (charIdx === -1) return;
+    const traits = CHARACTER_TRAITS[scriptIdRef.current]?.[characterName];
+    if (!traits) return;
+    const title = `[進階特徵] ${characterName}`;
+
+    setCharacterNotes(prev => {
+      if (prev.some(n => n.charIdx === charIdx && n.title === title)) return prev;
+      return [...prev, {
+        id: Date.now().toString(),
+        charIdx,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        title,
+        text: traits.advanced,
+        clueId: ''
+      }];
+    });
   };
 
   // Socket Management

@@ -21,6 +21,7 @@ interface CharacterTraitsPanelProps {
   onAddTraitToNote?: (title: string, content: string) => void;
   scriptId: number;
   allCharacterNames: string[];
+  onShowToast?: (msg: string) => void;
 }
 
 export const CharacterTraitsPanel: React.FC<CharacterTraitsPanelProps> = ({
@@ -31,6 +32,7 @@ export const CharacterTraitsPanel: React.FC<CharacterTraitsPanelProps> = ({
   onAddTraitToNote,
   scriptId,
   allCharacterNames,
+  onShowToast,
 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -135,6 +137,7 @@ export const CharacterTraitsPanel: React.FC<CharacterTraitsPanelProps> = ({
                       setShowConfirm(false);
                       // 🌟 確認解鎖後，直接把內容加入筆記
                       onAddTraitToNote?.('進階特徵', traits.advanced);
+                      onShowToast?.(`✅ 進階特徵已解鎖，可在筆記本－[角色檔案]－${characterName} 中察看`);
                     }}
                     className="flex-1 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-lg transition-colors"
                   >

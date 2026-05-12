@@ -105,6 +105,7 @@ interface NotebookModalProps {
   setEvidenceAssociations: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   unlockedCharacterAdvanced: string[];
   onUnlockCharacterAdvanced: (characterName: string) => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export const NotebookModal: React.FC<NotebookModalProps> = ({
@@ -149,6 +150,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
   setEvidenceAssociations,
   expandedNoteId,
   setExpandedNoteId,
+  onShowToast,
 }) => {
   if (!isNotebookOpen) return null;
 
@@ -457,7 +459,7 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
                       roomState?.phase === 'game_search' && 
                       unlockedCharacterAdvanced.length < ((roomState as any)?.currentRound || 1)
                     }
-
+                    allCharacterNames={previewScript.characters.map((c: any) => c.name)}
                     onAddTraitToNote={(traitType, content) => {
                       const targetName = previewScript.characters[selectedNotebookChar]?.name;
                       const title = `[${traitType}] ${targetName}`;
@@ -482,6 +484,9 @@ export const NotebookModal: React.FC<NotebookModalProps> = ({
                         clueId: ''
                       }]);
                       if (setExpandedNoteId) setExpandedNoteId(newId);
+                    }}
+                    onShowToast={(msg) => {
+                      onShowToast?.(msg);
                     }}
                   />
                 </div>
