@@ -112,8 +112,9 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-3xl mx-auto px-4"
+        className="fixed inset-0 bg-amber-50 overflow-y-auto z-10"
       >
+      <div className="max-w-3xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className={cn('text-2xl font-black mb-1', warm.heading)}>會後自我反思</h2>
@@ -138,6 +139,7 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
             desc="話題是否跳躍、分散，缺乏層次感？"
             onClick={() => setSubStep('coherence')}
           />
+        </div>
         </div>
       </motion.div>
     );
@@ -248,8 +250,9 @@ function CoherenceScreen({
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-2xl mx-auto px-4 pb-8"
+      className="fixed inset-0 bg-amber-50 overflow-y-auto z-10"
     >
+    <div className="max-w-2xl mx-auto px-4 py-8 pb-16">
       {/* 頂部 */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
@@ -262,7 +265,7 @@ function CoherenceScreen({
           <div className="w-px h-4 bg-amber-200" />
           <div>
             <h2 className={cn('text-lg font-black', warm.heading)}>結構及連貫性</h2>
-            <p className={cn('text-xs', warm.sub)}>RST 修辭結構理論</p>
+            <p className={cn('text-sm', warm.sub)}>RST 修辭結構理論</p>
           </div>
         </div>
         <Timer />
@@ -270,13 +273,13 @@ function CoherenceScreen({
 
       {/* 說明卡 */}
       <div className={cn('rounded-2xl border p-4 mb-6', warm.accentBg, warm.accentBorder)}>
-        <p className={cn('text-xs font-bold mb-2', warm.accent)}>📌 什麼是好的結構發言？</p>
-        <div className="space-y-1 text-xs text-stone-600 leading-relaxed">
+        <p className={cn('text-sm font-bold mb-2', warm.accent)}>📌 什麼是好的結構發言？</p>
+        <div className="space-y-1 text-sm text-stone-600 leading-relaxed">
           <p><span className="font-bold text-orange-600">動機層（Root）</span>：你的核心主張或結論</p>
           <p><span className="font-bold text-amber-600">行為層（Branch）</span>：支撐結論的邏輯行為</p>
           <p><span className="font-bold text-yellow-600">證據層（Leaf）</span>：具體的線索或事實</p>
         </div>
-        <div className={cn('mt-3 pt-3 border-t text-xs', warm.accentBorder, 'text-stone-500 italic')}>
+        <div className={cn('mt-3 pt-3 border-t text-sm', warm.accentBorder, 'text-stone-500 italic')}>
           範例：「我認為張警衛有殺人動機（動機）→ 因為他利用職務進入地下室（行為）→ 案發後他手持帶血鐵撬出現在地下室出口（證據）」
         </div>
       </div>
@@ -365,6 +368,7 @@ function CoherenceScreen({
       >
         {canSubmit ? '完成檢核 →' : '請完成上方所有必填題目'}
       </button>
+    </div>
     </motion.div>
   );
 }
@@ -374,7 +378,7 @@ function CoherenceScreen({
 function Section({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className={cn('rounded-2xl border p-4 mb-4', warm.card, warm.cardBorder)}>
-      <p className={cn('text-xs font-black uppercase tracking-widest mb-3 flex items-center gap-1.5', warm.label)}>
+      <p className={cn('text-sm font-black uppercase tracking-widest mb-3 flex items-center gap-1.5', warm.label)}>
         {icon} {label}
       </p>
       {children}
@@ -505,7 +509,7 @@ function CognitiveScreen({ transcript, onBack, onComplete, TranscriptBlock, Time
             <div className="w-px h-4 bg-amber-200" />
             <div>
               <h2 className={cn('text-lg font-black', warm.heading)}>認知負荷</h2>
-              <p className={cn('text-xs', warm.sub)}>檢視你的發言是否讓對方難以消化</p>
+              <p className={cn('text-sm', warm.sub)}>檢視你的發言是否讓對方難以消化</p>
             </div>
           </div>
           <Timer />
@@ -513,11 +517,11 @@ function CognitiveScreen({ transcript, onBack, onComplete, TranscriptBlock, Time
 
         {/* 說明卡 */}
         <div className={cn('rounded-2xl border p-4 mb-6', warm.accentBg, warm.accentBorder)}>
-          <p className={cn('text-xs font-bold mb-1', warm.accent)}>📌 什麼是認知負荷過高？</p>
-          <p className="text-xs text-stone-600 leading-relaxed">
+          <p className={cn('text-sm font-bold mb-1', warm.accent)}>📌 什麼是認知負荷過高？</p>
+          <p className="text-sm text-stone-600 leading-relaxed">
             一句話中塞入太多資訊，或使用對方不熟悉的詞彙而沒有解釋，都會讓聽者難以即時理解。
           </p>
-          <p className="text-xs text-stone-400 mt-2 italic">
+          <p className="text-sm text-stone-400 mt-2 italic">
             例：「我是2020/12/20農曆11月25日丑時凌晨3:45出生在高雄醫學院」→ 大部分細節不必要
           </p>
         </div>
@@ -645,7 +649,7 @@ function ClarityScreen({ transcript, onBack, onComplete, TranscriptBlock, Timer 
             <div className="w-px h-4 bg-amber-200" />
             <div>
               <h2 className={cn('text-lg font-black', warm.heading)}>語意明確性</h2>
-              <p className={cn('text-xs', warm.sub)}>檢視你的發言是否容易被誤解</p>
+              <p className={cn('text-sm', warm.sub)}>檢視你的發言是否容易被誤解</p>
             </div>
           </div>
           <Timer />
@@ -653,8 +657,8 @@ function ClarityScreen({ transcript, onBack, onComplete, TranscriptBlock, Timer 
 
         {/* 說明卡 */}
         <div className={cn('rounded-2xl border p-4 mb-6', warm.accentBg, warm.accentBorder)}>
-          <p className={cn('text-xs font-bold mb-1', warm.accent)}>📌 語意不明的常見成因</p>
-          <p className="text-xs text-stone-600 leading-relaxed">
+          <p className={cn('text-sm font-bold mb-1', warm.accent)}>📌 語意不明的常見成因</p>
+          <p className="text-sm text-stone-600 leading-relaxed">
             代名詞指涉不清、低說服力的語句、過多口語填充詞，都會讓發言變得模糊，讓聽者難以掌握你的真正意思。
           </p>
         </div>
