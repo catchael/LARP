@@ -1887,6 +1887,10 @@ export default function App() {
       setBackpackCapacity={setBackpackCapacity}
       unlockedAdvancedDetails={unlockedAdvancedDetails}
       setUnlockedAdvancedDetails={setUnlockedAdvancedDetails}
+      unlockedCharacters={unlockedCharacterAdvanced}
+      onUnlockAdvanced={handleUnlockCharacterAdvanced}
+      allCharacterNames={previewScript?.characters.map((c: any) => c.name) ?? []}
+      scriptId={roomState?.scriptId ?? 1}
     />
   );
 

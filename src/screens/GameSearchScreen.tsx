@@ -246,7 +246,7 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
               <div className="p-6 space-y-4 text-slate-300 text-sm leading-relaxed">
                 <ul className="space-y-3 list-disc pl-5">
                   <li>背包空間僅有 <span className="text-red-400 font-bold">4格</span>，請謹慎使用。</li>
-                  <li>在「筆記本 - 角色檔案」右側頁面，可解鎖人物特徵。</li>
+                  <li>進階人物特徵可在右側 <span className="text-amber-300 font-bold">🛒 購物車</span> 內解鎖。</li>
                   <li>可在商店購買背包空間及證物深層線索。</li>
                   <li>深層線索請在「筆記本 - 背包」中點擊查看。</li>
                 </ul>
@@ -257,6 +257,9 @@ export const GameSearchScreen: React.FC<GameSearchScreenProps> = ({
               </div>
               
               <div className="px-6 py-4 border-t border-slate-800 bg-slate-900/50">
+                <p className="text-[#f5ede2]/80 text-xs text-center mb-3 bg-[#3d2810]/40 border border-[#d8c4b0]/20 rounded-lg px-3 py-2">
+                  💡 進階特徵可在右側購物車內解鎖
+                </p>                
                 <button
                   onClick={() => setShowTutorial(false)}
                   className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-colors shadow-lg shadow-indigo-900/50"

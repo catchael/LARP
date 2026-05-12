@@ -20,6 +20,7 @@ interface CharacterTraitsPanelProps {
   canUnlock: boolean;
   onAddTraitToNote?: (title: string, content: string) => void;
   scriptId: number;
+  allCharacterNames: string[];
 }
 
 export const CharacterTraitsPanel: React.FC<CharacterTraitsPanelProps> = ({
@@ -29,6 +30,7 @@ export const CharacterTraitsPanel: React.FC<CharacterTraitsPanelProps> = ({
   canUnlock,
   onAddTraitToNote,
   scriptId,
+  allCharacterNames,
 }) => {
   const [showConfirm, setShowConfirm] = useState(false);
 

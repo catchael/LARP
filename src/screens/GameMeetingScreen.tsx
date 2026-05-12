@@ -567,7 +567,8 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
                                     characterName={char.name}
                                     unlockedCharacters={unlockedCharacterAdvanced}
                                     onUnlockAdvanced={() => {}}    
-                                    canUnlock={false}               
+                                    canUnlock={false}
+                                    allCharacterNames={previewScript?.characters.map((c: any) => c.name) ?? []}              
                                     onAddTraitToNote={(traitType, content) => {
                                       const title = `[${traitType}] ${char.name}`;
                                       const exists = characterNotes.some(n => n.charIdx === selectedNotebookChar && n.title === title);
