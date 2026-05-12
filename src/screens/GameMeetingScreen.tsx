@@ -315,9 +315,8 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
         break;
 
       case 'timeline':
-        // 跳至時間線分頁
+        // 時間線功能已移除，跳至角色檔案
         setMeetingTab('notebook');
-        setMeetingNotebookTab('timeline');
         break;
     }
   };
@@ -500,222 +499,17 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
 
               return (
                 <div className="flex flex-col h-full">
-                  {/* 頂部標題與子分頁切換 */}
+                  {/* 頂部標題 */}
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold flex items-center gap-3">
-                      <BookOpen className="text-indigo-400" /> 筆記本
+                      <BookOpen className="text-indigo-400" /> 角色檔案
                     </h2>
-                    <div className="flex gap-2 bg-slate-800 p-1 rounded-lg border border-slate-700 shadow-sm">
-                      <button
-                        onClick={() => setMeetingNotebookTab('timeline')}
-                        className={cn("px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2", meetingNotebookTab === 'timeline' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200")}
-                      >
-                        <Clock size={16} /> 時間線盤問
-                      </button>
-                      <button
-                        onClick={() => setMeetingNotebookTab('profiles')}
-                        className={cn("px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2", meetingNotebookTab === 'profiles' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200")}
-                      >
-                        <Users size={16} /> 角色檔案
-                      </button>
-                    </div>
                   </div>
 
                   {/* 筆記本主內容區塊 */}
                   <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full h-[650px] max-h-[75vh] min-h-0 overflow-hidden shadow-lg flex flex-col">
-                    {/* 🌟 內容 A：時間線盤問 (深色大表格) */}
-                    {meetingNotebookTab === 'timeline' && (
-                      <div className="flex-1 p-6 overflow-auto pb-[320px]">
-                        <p className="text-slate-400 mb-4 text-sm flex items-center gap-2">
-                          <Clock size={14} /> 此處顯示大家在搜查階段所記錄的時間線，可直接進行編輯或核對。
-                        </p>
-
-                        {/* 🌟 新增時間點的控制列 */}
-                        <div className="flex items-center gap-3 mb-4 shrink-0 bg-slate-800/80 p-3 rounded-xl border border-slate-700">
-                          <span className="text-slate-300 font-bold text-sm">增加時間點：</span>
-                          <input
-                            type="text"
-                            value={newTimeNode}
-                            onChange={e => setNewTimeNode(e.target.value)}
-                            className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-slate-200 text-sm outline-none focus:border-indigo-500 w-32"
-                            placeholder="如 19:15"
-                          />
-                          <button
-                            onClick={() => {
-                              const timeStr = newTimeNode.trim();
-                              if (!timeStr) return;
-
-                              const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-                              if (!timeRegex.test(timeStr)) {
-                                alert('請輸入有效的 24 小時制時間格式！\n正確範例：08:30 或 19:15');
-                                return;
-                              }
-
-                              // 檢查是否已經存在相同時間
-                              if (displayNodes.includes(timeStr)) {
-                                alert('這個時間點已經存在囉！');
-                                return;
-                              }
-
-                              // 🌟 格式正確且不重複，加入到【私密節點】中，不要觸發全域同步
-                              setPrivateCustomNodes(prev => [...prev, timeStr]);
-                              setNewTimeNode(''); // 清空輸入框
-                            }}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-md transition-colors flex items-center gap-1"
-                          >
-                            <Plus size={16} /> 新增
-                          </button>
-                        </div>
-
-                        {/* 🌟 釘選比例調整 slider */}
-                        <div className="flex items-center gap-3 mb-3 bg-slate-800/60 px-4 py-2 rounded-xl border border-slate-700 w-fit">
-                          <Pin size={14} className="text-indigo-400" />
-                          <span className="text-xs text-slate-400">釘選欄寬 ×{pinScale.toFixed(1)}</span>
-                          <input
-                            type="range"
-                            min={1.5}
-                            max={2.0}
-                            step={0.1}
-                            value={pinScale}
-                            onChange={e => setPinScale(parseFloat(e.target.value))}
-                            className="accent-indigo-500 w-32"
-                          />
-                          {pinnedChars.size > 0 && (
-                            <button
-                              onClick={() => setPinnedChars(new Set())}
-                              className="text-xs text-slate-400 hover:text-red-400 transition-colors flex items-center gap-1"
-                              title="清除所有釘選"
-                            >
-                              <PinOff size={12} /> 清除釘選
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="overflow-x-auto pb-4">
-                          <table className="text-left border-collapse" style={{ tableLayout: 'fixed', width: 'max-content', minWidth: '100%' }}>
-                            <thead>
-                              <tr>
-                                <th className="p-3 border-b-2 border-slate-600 w-24 bg-slate-800 sticky left-0 z-10 text-slate-300">時間</th>
-                                {previewScript!.characters.map((c: any, i: number) => {
-                                  const isPinned = pinnedChars.has(i);
-                                  const colW = isPinned ? Math.round(BASE_COL_W * pinScale) : BASE_COL_W;
-                                  return (
-                                    <th
-                                      key={c.name}
-                                      className={cn(
-                                        "p-3 border-b-2 border-slate-600 text-slate-300 transition-all",
-                                        isPinned && "bg-indigo-900/30"
-                                      )}
-                                      style={{ width: `${colW}px`, minWidth: `${colW}px` }}
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="truncate">{i === myCharacterIndex ? '你' : c.name}</span>
-                                        <button
-                                          onClick={() => togglePin(i)}
-                                          className={cn(
-                                            "p-1 rounded transition-colors shrink-0",
-                                            isPinned
-                                              ? "text-indigo-400 hover:text-indigo-300"
-                                              : "text-slate-500 hover:text-slate-300"
-                                          )}
-                                          title={isPinned ? "取消釘選" : "釘選此角色 (欄寬放大)"}
-                                        >
-                                          <Pin size={14} className={isPinned ? "fill-current" : ""} />
-                                        </button>
-                                      </div>
-                                    </th>
-                                  );
-                                })}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {displayNodes.map(time => (
-                                <tr key={time} className="hover:bg-slate-700/50 transition-colors">
-                                  <td className="p-3 border-b border-slate-700 font-bold text-indigo-300 bg-slate-800 sticky left-0 z-10 shadow-[1px_0_0_#334155] group">
-                                    <div className="flex items-center justify-between">
-                                      <span>{time}</span>
-                                      {/* 🌟 垃圾桶按鈕：平時隱藏 (opacity-0)，滑鼠移到這格時才顯示 (group-hover:opacity-100) */}
-                                      <button
-                                        onClick={() => handleDeleteTimeNode(time)}
-                                        className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-300 hover:scale-110 p-1"
-                                        title="刪除此時間點"
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  </td>
-                                  {previewScript!.characters.map((c: any, i: number) => {
-                                    const isPinned = pinnedChars.has(i);
-                                    const colW = isPinned ? Math.round(BASE_COL_W * pinScale) : BASE_COL_W;
-                                    return (
-                                    <td
-                                      key={c.name}
-                                      className={cn(
-                                        "p-3 border-b border-slate-700 align-top relative group/cell transition-all",
-                                        isPinned && "bg-indigo-900/10"
-                                      )}
-                                      style={{ width: `${colW}px`, minWidth: `${colW}px` }}
-                                    >
-                                        {/* 👇 新增這個專屬的拖曳把手 */}
-                                        <div
-                                          draggable
-                                          onDragStart={(e) => {
-                                            const content = timelineEvents[time]?.[i] || '無紀錄';
-                                            const charName = i === myCharacterIndex ? '你' : c.name;
-                                            e.dataTransfer.setData('application/json', JSON.stringify({
-                                              id: `timeline-${time}-${i}`,
-                                              type: 'timeline',
-                                              content: `[${time} ${charName}動向：${content}]`
-                                            }));
-                                            // 🌟 加入這行！當玩家開始拖曳，且是劇本 2 時，自動展開助手面板
-                                            if (Number(roomState?.scriptId) === 2) {
-                                              setIsHelperPanelOpen(true);
-                                            }
-                                          }}
-                                          className="absolute top-4 right-4 opacity-0 group-hover/cell:opacity-100 cursor-grab active:cursor-grabbing text-slate-500 hover:text-indigo-400 p-1 bg-slate-800 rounded z-20 shadow-sm transition-opacity"
-                                          title="按住拖曳此動向"
-                                        >
-                                          <GripHorizontal size={14} />
-                                        </div>
-                                      <textarea
-                                        ref={el => {
-                                          if (el) {
-                                            el.style.height = 'auto';
-                                            el.style.height = el.scrollHeight + 'px';
-                                          }
-                                        }}
-                                        className="w-full bg-slate-900/50 border border-transparent hover:border-slate-600 focus:border-indigo-500 focus:bg-slate-900 rounded p-2 outline-none resize-none text-sm transition-all text-slate-300 placeholder-slate-600 overflow-hidden whitespace-pre-wrap break-words"
-                                        value={
-                                          timelineEvents[time]?.[i] !== undefined
-                                            ? timelineEvents[time][i]
-                                            : (i === myCharacterIndex 
-                                                ? (previewScript!.characters[i].timeline?.find((t: any) => t.time === time)?.event || '') 
-                                                : '')
-                                        }
-                                        onChange={(e) => {
-                                          setTimelineEvents(prev => ({
-                                            ...prev,
-                                            [time]: { ...(prev[time] || {}), [i]: e.target.value }
-                                          }));
-                                          e.target.style.height = 'auto';
-                                          e.target.style.height = e.target.scrollHeight + 'px';
-                                        }}
-                                        placeholder="..."
-                                        rows={1}
-                                      />
-                                    </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 🌟 內容 B：角色檔案 (寬螢幕版 + 局部滾動筆記) */}
-                    {meetingNotebookTab === 'profiles' && (
+                    {/* 角色檔案 (已移除時間線功能) */}
+                    {(
                       <div className="flex flex-1 overflow-hidden">
 
                         {/* === 左側：改成固定寬度 (w-64)，把空間讓給右邊 === */}
@@ -1409,6 +1203,26 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
         </div>
       
 
+      {/* 階段標示條 — 固定在底部 mic bar 上方，不遮擋其他 UI */}
+      {(() => {
+        const stageInfo: Record<string, { label: string; desc: string; color: string }> = {
+          pre_round_organizing: { label: '發言前準備', desc: '整理思路，準備好後點擊已就緒', color: 'bg-indigo-900/80 border-indigo-700 text-indigo-200' },
+          round_robin:          { label: '輪流發言',   desc: isMyTurn ? '輪到你了，請開啟麥克風' : `目前發言：${(currentSpeaker as any)?.character ?? '—'}`, color: isMyTurn ? 'bg-emerald-900/80 border-emerald-600 text-emerald-200' : 'bg-slate-800/90 border-slate-600 text-slate-300' },
+          organizing:           { label: '整理思緒',   desc: '所有人發言完畢，準備好後點擊已就緒', color: 'bg-amber-900/80 border-amber-700 text-amber-200' },
+          free_discussion:      { label: '自由討論',   desc: '開放討論，可自由開麥發言', color: 'bg-teal-900/80 border-teal-700 text-teal-200' },
+          voting_prompt:        { label: '是否延長討論', desc: '請投票決定是否繼續討論', color: 'bg-rose-900/80 border-rose-700 text-rose-200' },
+        };
+        const info = stageInfo[meetingStage];
+        if (!info) return null;
+        return (
+          <div className={cn('flex items-center gap-3 px-6 py-1.5 border-t text-sm shrink-0', info.color)}>
+            <span className="font-black tracking-wider">{info.label}</span>
+            <span className="w-px h-4 bg-current opacity-30" />
+            <span className="opacity-80">{info.desc}</span>
+          </div>
+        );
+      })()}
+
       {/* Bottom Subtitle & Mic Bar */}
       {/* 🌟 加了 z-[70] 確保這整條儀表板永遠在最上層 */}
       <div className="h-24 bg-slate-950 border-t border-slate-800 flex items-center px-8 gap-6 shrink-0 relative z-[70]">
@@ -1779,9 +1593,8 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
               
               <p className="text-slate-300 text-base mb-8 leading-relaxed">
                 在左側的「筆記本」中，<br/>
-                可於<span className="text-indigo-400 font-bold mx-1">右上角切換</span>查看：<br/><br/>
-                🕒 <span className="text-emerald-400 font-bold tracking-wide">時間線盤問</span><br/>
-                👤 <span className="text-amber-400 font-bold tracking-wide">角色檔案與推理</span>
+                可查看各角色的<span className="text-amber-400 font-bold mx-1">角色檔案與推理筆記</span>，<br/>
+                並新增你對各角色的推理與觀察。
               </p>
               
               <button
