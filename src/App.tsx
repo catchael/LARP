@@ -2232,9 +2232,11 @@ export default function App() {
           <SelfReflectionScreen
             key="self_reflection"
             transcript={(() => {
-              const round = roomState?.currentRound ?? 1;
               const myChar = roomState?.users.find(u => u.email === user?.email)?.assignedCharacter ?? '';
-              return transcriptHook.turnsByRoundForCharacter(round, myChar);
+              const round = roomState?.currentRound ?? 1;
+              return transcriptHook.ordered
+                .filter(t => t.round === round && t.phase === 'turn' && t.line.startsWith(myChar + '：'))
+                .map(t => t.line.split('：').slice(1).join('：')); // 去掉角色名前綴
             })()}
             clues={allCollectedEvidence}
             onComplete={(data: any) => { // 🌟 加入 : any 解決 "Parameter 'data' implicitly has an any type"

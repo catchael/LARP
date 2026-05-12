@@ -8,7 +8,7 @@ import { Evidence } from '../gameData';
 import { cn } from '../types';
 
 interface SelfReflectionProps {
-  transcript: any[];
+  transcript: string[];
   clues: Evidence[];
   onComplete: (data: any) => void;
 }
@@ -84,7 +84,7 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
         <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
           {transcript.map((line: any, i: number) => (
             <p key={i} className={cn('text-sm leading-relaxed', warm.transcriptText)}>
-              {typeof line === 'string' ? line : line?.text ?? JSON.stringify(line)}
+              {line}
             </p>
           ))}
         </div>
