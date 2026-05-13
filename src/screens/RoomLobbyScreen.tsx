@@ -134,18 +134,9 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
                 >
                   <Play size={24} fill="currentColor" /> 開始遊戲
                 </button>
-                {currentPlayers < maxPlayers && (
-                  <button
-                    onClick={() => {
-                      if (confirm('確定要強制開始嗎？未加入的玩家將由 AI 託管。')) {
-                        socket?.emit('start_game', { allCharacters: previewScript.characters.map(c => c.name) });
-                      }
-                    }}
-                    className="w-full py-3 bg-amber-50 text-amber-600 rounded-2xl font-bold hover:bg-amber-100 transition-all border border-amber-100 flex items-center justify-center gap-2"
-                  >
-                    <Zap size={18} /> 強制開始 (AI 託管)
-                  </button>
-                )}
+                
+                {/* 已經將「強制開始 (AI 託管)」按鈕移除 */}
+                
                 {!canStart && (
                   <p className="text-center text-xs font-bold text-amber-500 animate-pulse">
                     等待玩家加入 ({currentPlayers}/{maxPlayers})
