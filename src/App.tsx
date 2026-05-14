@@ -674,13 +674,20 @@ export default function App() {
       });
     };
 
+    // createPeerConnection 內改成 let
+    let makingOffer = false;
+
     pc.onnegotiationneeded = async () => {
+      if (makingOffer || pc.signalingState !== 'stable') return;
+      makingOffer = true;
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socket.emit('webrtc_offer', { target: targetId, sdp: offer });
+        socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
         console.error("Negotiation error", err);
+      } finally {
+        makingOffer = false;
       }
     };
 
@@ -851,17 +858,29 @@ export default function App() {
       
       // 🌟 Initiate WebRTC calls in any voice-enabled phase (角色預覽開始就能通話)
       const VOICE_PHASES = ['room_lobby', 'character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed']; 
+        // 在 room_state 事件的 VOICE_PHASES 區塊內
         if (VOICE_PHASES.includes(state.phase) && newSocket) {
           state.meetingUsers?.forEach((u: any) => {
             if (u.id !== newSocket.id && !u.isAI && !peerConnections.current[u.id]) {
-              // Simple rule to decide who initiates the call (lexicographical order of socket IDs)
               const currentSocketId = newSocket.id || "";
               if (currentSocketId < u.id) {
-                const pc = createPeerConnection(u.id, newSocket);
-                pc.createOffer().then(offer => {
-                  pc.setLocalDescription(offer);
-                  newSocket.emit('webrtc_offer', { target: u.id, sdp: offer });
-                });
+                // 如果 stream 還沒準備好，等它準備好再建立連線
+                const setupPeer = () => {
+                  const pc = createPeerConnection(u.id, newSocket);
+                  // onnegotiationneeded 會自動發 offer，不用手動呼叫
+                };
+
+                if (localStreamRef.current) {
+                  setupPeer();
+                } else {
+                  // stream 尚未就緒，短暫 polling 等待
+                  const waitForStream = setInterval(() => {
+                    if (localStreamRef.current) {
+                      clearInterval(waitForStream);
+                      setupPeer();
+                    }
+                  }, 100);
+                }
               }
             }
           });
