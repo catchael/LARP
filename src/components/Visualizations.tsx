@@ -766,22 +766,30 @@ const speedData = [
   { time: 6, speed: 185 },
 ];
 
-export const SpeedChart = ({ data = [] }: { data?: { time: string; rate: number }[] }) => (
-  <div className="h-64 w-full bg-white p-4 rounded-xl border border-slate-200">
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data.length > 0 ? data : speedData.map(d => ({ time: d.time.toString(), rate: d.speed }))}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="time" label={{ value: '時間', position: 'insideBottom', offset: -5 }} />
-        <YAxis label={{ value: '語速 (CPM)', angle: -90, position: 'insideLeft' }} />
-        <Tooltip />
-        <Line type="monotone" dataKey="rate" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-      </LineChart>
-    </ResponsiveContainer>
-    <p className="text-center text-xs text-slate-500 mt-2">
-      {data.length > 0 ? "這是您在上一頁測試時的語速變化" : "語速下降處通常是您強調重點的時刻"}
-    </p>
-  </div>
-);
+// 修改後
+export const SpeedChart = ({ data = [] }: { data?: { time: string; rate: number }[] }) => {
+  const [ready, setReady] = React.useState(false);
+  React.useEffect(() => setReady(true), []);
+
+  return (
+    <div className="h-64 w-full bg-white p-4 rounded-xl border border-slate-200" style={{ minWidth: 0 }}>
+      {ready && (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data.length > 0 ? data : speedData.map(d => ({ time: d.time.toString(), rate: d.speed }))}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="time" label={{ value: '時間', position: 'insideBottom', offset: -5 }} />
+            <YAxis label={{ value: '語速 (CPM)', angle: -90, position: 'insideLeft' }} />
+            <Tooltip />
+            <Line type="monotone" dataKey="rate" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+      <p className="text-center text-xs text-slate-500 mt-2">
+        {data.length > 0 ? "這是您在上一頁測試時的語速變化" : "語速下降處通常是您強調重點的時刻"}
+      </p>
+    </div>
+  );
+};
 
 export const VolumeMeter = () => {
   const [isListening, setIsListening] = React.useState(false);

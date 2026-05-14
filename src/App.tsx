@@ -648,7 +648,7 @@ export default function App() {
     socket?.emit('end_act');
   }, [currentActId, socket, isHost]);
 
-  const createPeerConnection = (targetId: string, socket: Socket) => {
+  const createPeerConnection = (targetId: string, socket: Socket, isPolite: boolean) => {
     if (peerConnections.current[targetId]) return peerConnections.current[targetId];
 
     const pc = new RTCPeerConnection({
@@ -709,19 +709,12 @@ export default function App() {
       });
     };
 
-    // ── Offer / 重新協商（只有 initiator 會觸發）────────────────
-    // 用 let 而非 useRef：createPeerConnection 不是 React 元件，不能呼叫 Hook
     let makingOffer = false;
-
     pc.onnegotiationneeded = async () => {
-      // 先擋，避免 Signaling Glare：同時兩端都在建 offer
       if (makingOffer || pc.signalingState !== 'stable') return;
       try {
         makingOffer = true;
-        const offer = await pc.createOffer();
-        // 再次確認，因為 createOffer() 是 async
-        if (pc.signalingState !== 'stable') return;
-        await pc.setLocalDescription(offer);
+        await pc.setLocalDescription(); // 不用手動 createOffer，直接讓瀏覽器決定
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
         console.error('[WebRTC] Negotiation error:', err);
@@ -901,10 +894,8 @@ export default function App() {
           state.meetingUsers?.forEach((u: any) => {
             if (u.id !== newSocket.id && !u.isAI && !peerConnections.current[u.id]) {
               const currentSocketId = newSocket.id || "";
-              // 字典序較小的那方負責發 offer，避免雙方同時發
               if (currentSocketId < u.id) {
-                createPeerConnection(u.id, newSocket);
-                // ❌ 不手動 createOffer()，onnegotiationneeded 加完 transceiver 後自動觸發
+                createPeerConnection(u.id, newSocket, true); // 我字典序較小，我是禮讓方
               }
             }
           });
@@ -1061,14 +1052,30 @@ export default function App() {
     });
 
     // WebRTC Signaling Listeners (Main)
-    newSocket.on('webrtc_offer', async (data: { sender: string, sdp: RTCSessionDescriptionInit }) => {
+    newSocket.on('webrtc_offer', async (data) => {
+      const myId = newSocket.id ?? '';
+      const isPolite = myId < data.sender; // 字典序較小的是禮讓方
+
       try {
-        const pc = createPeerConnection(data.sender, newSocket);
-        // ICE restart 進來時本地可能是 have-local-offer，需要先 rollback
-        if (pc.signalingState !== 'stable') {
-          await pc.setLocalDescription({ type: 'rollback' });
+        const pc = createPeerConnection(data.sender, newSocket, isPolite);
+        const offerCollision = pc.signalingState !== 'stable';
+
+        // 強硬方：碰到碰撞直接無視對方的 offer
+        if (!isPolite && offerCollision) {
+          console.warn('[WebRTC] 強硬方忽略碰撞 offer');
+          return;
         }
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+
+        // 禮讓方：碰到碰撞先 rollback 自己的 offer
+        if (isPolite && offerCollision) {
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' }),
+            pc.setRemoteDescription(new RTCSessionDescription(data.sdp)),
+          ]);
+        } else {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        }
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         newSocket.emit('webrtc_answer', { target: data.sender, sdp: answer });
