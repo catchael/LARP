@@ -1121,25 +1121,6 @@ export default function App() {
       }
     });
 
-    newSocket.on('webrtc_answer', async (data: { sender: string, sdp: RTCSessionDescriptionInit }) => {
-      try {
-        const pc = peerConnections.current[data.sender];
-        if (pc && pc.signalingState === 'have-local-offer') {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          
-          // 🌟 加入這段：清空等待中的 ICE Candidate
-          if (icePendingCandidates[data.sender]?.length) {
-            for (const c of icePendingCandidates[data.sender]) {
-              await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
-            }
-            icePendingCandidates[data.sender] = [];
-          }
-        }
-      } catch (err) {
-        console.error('[WebRTC] answer 處理失敗:', err);
-      }
-    });
-
     // Buffer ICE candidates until remote description is ready
     const icePendingCandidates: Record<string, RTCIceCandidateInit[]> = {};
     newSocket.on('webrtc_ice', async (data: { sender: string, candidate: RTCIceCandidateInit }) => {
