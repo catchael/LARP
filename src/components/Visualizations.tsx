@@ -18,7 +18,8 @@ declare global {
 // Configure ONNX Runtime to use CDN for WASM files
 if (typeof window !== 'undefined') {
   (window as any).ort = ort;
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/";
+  // Visualizations.tsx
+  ort.env.wasm.wasmPaths = "/vad/";
   ort.env.wasm.numThreads = 1;
 }
 

@@ -41,7 +41,31 @@ async function startServer() {
 
     await initDb();
 
+    app.get('/avatar-proxy', async (req, res) => {
+      const url = req.query.url as string;
+      if (!url?.startsWith('https://api.dicebear.com/')) {
+        return res.status(400).send('Invalid URL');
+      }
+      const response = await fetch(url);
+      const svg = await response.text();
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.send(svg);
+    });
+
     app.use("/api", apiRouter);
+
+    app.get('/avatar-proxy', async (req, res) => {
+      const url = req.query.url as string;
+      if (!url?.startsWith('https://api.dicebear.com/')) {
+        return res.status(400).send('Invalid URL');
+      }
+      const response = await fetch(url);
+      const svg = await response.text();
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.send(svg);
+    });
 
     registerSocketHandlers(io);
 

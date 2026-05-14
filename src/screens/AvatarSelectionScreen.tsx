@@ -37,7 +37,7 @@ export const AvatarSelectionScreen: React.FC<AvatarSelectionScreenProps> = ({
         
         <div className="flex justify-center mb-6">
           <div className="relative group p-4 bg-white/5 rounded-full border-2 border-indigo-500/30">
-            <img src={avatarUrl} alt="Avatar" className="w-40 h-40 rounded-full" />
+            <img src={avatarUrl} alt="Avatar" className="w-40 h-40 rounded-full" crossOrigin="anonymous" />
             <button 
               onClick={roll}
               className="absolute bottom-0 right-0 p-3 bg-indigo-600 rounded-full text-white shadow-lg hover:scale-110 transition-transform active:scale-95"

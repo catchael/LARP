@@ -53,6 +53,11 @@ import { Mascot } from './components/Mascot';
 import { ReportPage } from './components/ReportModal';
 import SinglePlayerApp from './single-player/SinglePlayerApp';
 
+const proxyAvatar = (url: string) =>
+  url.startsWith('https://api.dicebear.com/')
+    ? `/avatar-proxy?url=${encodeURIComponent(url)}`
+    : url;
+
 export default function App() {
   const scriptIdRef = useRef<number>(1);
   const [phase, setPhase] = useState<AppPhase>('login');
@@ -1752,7 +1757,7 @@ export default function App() {
                     ? "border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
                     : "border-slate-600"
               )}>
-                <img src={u.avatar} alt={u.email} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={proxyAvatar(u.avatar || '')} alt={u.email} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
               {/* 🌟 右下角麥克風圖示：開麥=紅色 Mic；未開麥但已準備=綠色 Check */}
               {isUserMicOn ? (
@@ -2030,12 +2035,7 @@ export default function App() {
             className="relative w-14 h-14 bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden group-hover:scale-105 transition-transform active:scale-95 flex items-center justify-center z-10"
           >
             {user.avatar ? (
-              <img 
-                src={user.avatar} 
-                alt="個人紀錄" 
-                className="w-full h-full object-cover bg-slate-50"
-                referrerPolicy="no-referrer"
-              />
+              <img src={proxyAvatar(user.avatar || '')} alt="個人紀錄" className="w-full h-full object-cover bg-slate-50" referrerPolicy="no-referrer" />
             ) : (
               <UserCircle size={28} className="text-indigo-600" />
             )}
