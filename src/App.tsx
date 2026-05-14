@@ -1301,10 +1301,16 @@ export default function App() {
         if (!state.isWarningActive) {
           setSilenceWarning({ active: false, countdown: 0 });
         }
-        // 🌟 修正：強制關麥條件收緊
-        //    1. 必須是「輪到別人說話」(不是自己)
-        //    2. 且目前麥克風確實是開著的（避免冗餘的 setState）
-        //    用 setIsMicOn functional form，讀取最新值再決定要不要關
+
+        // 🌟 關鍵修復：取得當前的討論階段 (利用 ref 確保拿到最新狀態)
+        const currentStage = (roomStateRef.current as any)?.meetingStage;
+
+        // 🛡️ 如果是「自由討論」階段，大家都可以發言，絕對不可以因為不是 currentSpeaker 就強制關麥！
+        if (currentStage === 'free_discussion') {
+          return; 
+        }
+
+        // 只有在「輪流發言」等嚴格階段，才執行非發言者的強制關麥
         if (state.currentSpeaker?.id !== socket.id) {
           setIsMicOn(prev => {
             if (prev) {
