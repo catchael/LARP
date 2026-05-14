@@ -674,21 +674,21 @@ export default function App() {
       });
     };
 
-    const makingOffer = useRef(false);
+    // ✅ 用 let 而非 useRef — createPeerConnection 不是 React 元件，不能呼叫 Hook
+    let makingOffer = false;
 
-    // 在 onnegotiationneeded 中
     pc.onnegotiationneeded = async () => {
+      // 先檢查狀態，避免重複發 offer（Signaling Glare 的根源）
+      if (makingOffer || pc.signalingState !== 'stable') return;
       try {
-        makingOffer.current = true;
+        makingOffer = true;
         const offer = await pc.createOffer();
-        // 檢查狀態是否仍允許設置描述
-        if (pc.signalingState !== "stable") return; 
         await pc.setLocalDescription(offer);
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
         console.error("Negotiation error", err);
       } finally {
-        makingOffer.current = false;
+        makingOffer = false;
       }
     };
 
@@ -1372,37 +1372,27 @@ export default function App() {
       analyserRef.current = analyser;
       micSourceRef.current = microphone;
 
-      // 🌟 AudioContext 硬體錯誤自動恢復
-      // 瀏覽器在切換音訊裝置、藍牙耳機連線中斷等情況下會拋出此錯誤
-      audioContextRef.current.onstatechange = async () => {
+      // 🌟 AudioContext 硬體錯誤自動恢復（藍牙切換、裝置拔插等）
+      const rebuildAudioContext = async () => {
         const ctx = audioContextRef.current;
         if (!ctx) return;
-        console.warn('[AudioContext] state changed:', ctx.state);
-        if (ctx.state === 'interrupted' || ctx.state === 'suspended') {
-          try { await ctx.resume(); } catch (_) {}
+        if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
+          try { await ctx.resume(); return; } catch (_) {}
         }
-        // running 以外的狀態若 resume 無效（例如音訊裝置被拔掉），重建整個 context
-        if (ctx.state !== 'running') {
-          try {
-            await ctx.close();
-          } catch (_) {}
-          try {
-            const newCtx = new AudioContext();
-            const newAnalyser = newCtx.createAnalyser();
-            newAnalyser.fftSize = 256;
-            const newMic = newCtx.createMediaStreamSource(s);
-            newMic.connect(newAnalyser);
-            audioContextRef.current = newCtx;
-            analyserRef.current = newAnalyser;
-            micSourceRef.current = newMic;
-            // 遞迴掛上同一個 handler
-            newCtx.onstatechange = audioContextRef.current?.onstatechange ?? null;
-            console.log('[AudioContext] 重建完成');
-          } catch (rebuildErr) {
-            console.error('[AudioContext] 重建失敗:', rebuildErr);
-          }
-        }
+        // resume 無效，重建整個 context
+        try { await ctx.close(); } catch (_) {}
+        const newCtx = new AudioContext();
+        const newAnalyser = newCtx.createAnalyser();
+        newAnalyser.fftSize = 256;
+        const newMic = newCtx.createMediaStreamSource(s);
+        newMic.connect(newAnalyser);
+        audioContextRef.current = newCtx;
+        analyserRef.current = newAnalyser;
+        micSourceRef.current = newMic;
+        newCtx.onstatechange = rebuildAudioContext;
+        console.log('[AudioContext] 重建完成');
       };
+      audioContextRef.current.onstatechange = rebuildAudioContext;
 
     }).catch(err => console.error("Mic pre-acquire error", err));
 
