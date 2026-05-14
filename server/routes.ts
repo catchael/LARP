@@ -57,46 +57,52 @@ router.get("/ping", (_req, res) => res.json({ ok: true }));
 
 router.get("/turn-credentials", async (_req, res) => {
   try {
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const domain = process.env.METERED_DOMAIN;     // larp-game.metered.live
+    const secretKey = process.env.METERED_SECRET_KEY;
 
-    // 如果環境變數沒抓到，退回使用 Google STUN
-    if (!accountSid || !authToken) {
-      console.warn("[TURN] 缺少 Twilio 金鑰，使用備援 STUN");
-      return res.json({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    if (!domain || !secretKey) {
+      console.warn("[TURN] 缺少 Metered 金鑰，使用備援 STUN");
+      return res.json({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
     }
 
-    // 透過原生的 fetch 呼叫 Twilio API 獲取動態 TURN 憑證
-    const response = await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Tokens.json`,
+    // 步驟一：建立有期限的 credential（7200秒 = 2小時，夠一場遊戲用）
+    const createRes = await fetch(
+      `https://${domain}/api/v1/turn/credential?secretKey=${secretKey}`,
       {
         method: "POST",
-        headers: {
-          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
-        },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiryInSeconds: 7200 }),
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Twilio API 錯誤: ${response.status} - ${errorText}`);
+    if (!createRes.ok) {
+      throw new Error(`建立 credential 失敗: ${createRes.status}`);
     }
 
-    const data = await response.json();
-    
-    // Twilio 回傳的欄位是 ice_servers (底線)，我們把它轉存給前端
-    const iceServers = data.ice_servers;
-    
-    // 把 Google STUN 加在最前面當作雙重保險
+    const { apiKey } = await createRes.json();
+
+    // 步驟二：用 apiKey 拿 iceServers 陣列
+    const iceRes = await fetch(
+      `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`
+    );
+
+    if (!iceRes.ok) {
+      throw new Error(`取得 iceServers 失敗: ${iceRes.status}`);
+    }
+
+    const iceServers: any[] = await iceRes.json();
     iceServers.unshift({ urls: "stun:stun.l.google.com:19302" });
 
-    // Twilio 的憑證有效時間有限 (TTL預設最高86400秒)，快取設為短一點確保安全
     res.set("Cache-Control", "private, max-age=3600");
     res.json({ iceServers });
 
   } catch (err: any) {
-    console.error("[TURN] 取得 Twilio credentials 失敗:", err.message);
-    res.json({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    console.error("[TURN] 取得 Metered credentials 失敗:", err.message);
+    res.json({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
   }
 });
 
