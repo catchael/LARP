@@ -353,8 +353,12 @@ export function registerSocketHandlers(io: Server) {
     
     room.phaseEndTime = Date.now() + 30 * 1000;
     room.phaseTimeout = setTimeout(() => {
-      // 🌟 時間到沒人按，直接進入最終投票
-      startPhase(roomId, 'self_reflection', 240);
+      // 🌟 修改這裡：時間到沒人按，根據劇本決定去哪
+      if (room.scriptId === 2) {
+        startPhase(roomId, 'self_reflection', 240); // 劇本 2 進自我覆盤
+      } else {
+        startPhase(roomId, 'game_voting', 180); // 劇本 1 直接進投票
+      }
     }, 30 * 1000);
 
     io.to(roomId).emit('room_state', getRoomState(roomId));
@@ -1209,7 +1213,6 @@ export function registerSocketHandlers(io: Server) {
       
       const user = room.users.find(u => u.id === socket.id);
       if (user) {
-        // 🌟 防呆：確保 moreDiscussionVotes 已經被初始化為物件
         if (!room.moreDiscussionVotes) {
           room.moreDiscussionVotes = {};
         }
@@ -1219,14 +1222,18 @@ export function registerSocketHandlers(io: Server) {
 
         const playingCount = room.users.filter(u => u.connectionStatus !== 'offline' && u.assignedCharacter).length;
         
-        // 🌟 現在 TypeScript 就知道它絕對是個 object，不會報錯了
         if (Object.keys(room.moreDiscussionVotes).length >= playingCount) {
           const wantsMore = Object.values(room.moreDiscussionVotes).some(v => v === true);
           
           if (wantsMore) {
             startFreeDiscussion(currentRoomId);
           } else {
-            startPhase(currentRoomId, 'self_reflection', 240);
+            // 🌟 修改這裡：根據劇本 ID 分流
+            if (room.scriptId === 2) {
+              startPhase(currentRoomId, 'self_reflection', 240);
+            } else {
+              startPhase(currentRoomId, 'game_voting', 180);
+            }
           }
         }
       }
