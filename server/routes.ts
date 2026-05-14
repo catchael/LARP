@@ -55,6 +55,38 @@ if (!process.env.NVIDIA_API_KEY) {
 // ── Keep-alive ping（供 UptimeRobot 監控用）─────────────
 router.get("/ping", (_req, res) => res.json({ ok: true }));
 
+// ── TURN credentials（動態發放，帶有時效性）──────────────
+// credentials 每次都從 Metered API 即時取得，不在前端暴露 API key
+router.get("/turn-credentials", async (_req, res) => {
+  try {
+    const appName = process.env.METERED_APP_NAME;
+    const apiKey  = process.env.METERED_API_KEY;
+    if (!appName || !apiKey) {
+      // 沒設定就 fallback：只回傳 Google STUN，不讓請求炸掉
+      return res.json({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      });
+    }
+
+    const response = await fetch(
+      `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
+    );
+    if (!response.ok) throw new Error(`Metered API ${response.status}`);
+
+    const iceServers: any[] = await response.json();
+    // 補上 Google STUN 作為備援（Metered 本身也有 STUN，但多幾個無妨）
+    iceServers.unshift({ urls: "stun:stun.l.google.com:19302" });
+
+    // 設定 Cache-Control：credential 有效期通常 24h，快取 23h 避免過期
+    res.set("Cache-Control", "private, max-age=82800");
+    res.json({ iceServers });
+  } catch (err: any) {
+    console.error("[TURN] 取得 credentials 失敗:", err.message);
+    // 發生錯誤時 fallback 純 STUN，不讓遊戲直接爆炸
+    res.json({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  }
+});
+
 // ── 使用者登入 / 註冊 ─────────────────────────────────────
 
 router.post("/login", async (req, res) => {

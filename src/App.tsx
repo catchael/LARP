@@ -228,9 +228,25 @@ export default function App() {
   const recognitionRef = useRef<any>(null);
   const recognitionActiveRef = useRef(false);
   const isMicRequestingRef = useRef(false); // ✅ 防止重複請求麥克風
+  // 🌟 快取 TURN credentials，避免每次建立 peer connection 都打 API
+  const iceServersRef = useRef<RTCIceServer[]>([{ urls: 'stun:stun.l.google.com:19302' }]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const roomStateRef = useRef<RoomState | null>(null);
   useEffect(() => { roomStateRef.current = roomState; }, [roomState]);
+
+  // 🌟 登入後立即預載 TURN credentials，之後建立 peer connection 直接用快取
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/turn-credentials')
+      .then(r => r.json())
+      .then(({ iceServers }) => {
+        if (Array.isArray(iceServers) && iceServers.length > 0) {
+          iceServersRef.current = iceServers;
+          console.log('[TURN] credentials 載入完成，共', iceServers.length, '個 server');
+        }
+      })
+      .catch(err => console.warn('[TURN] credentials 載入失敗，使用 STUN fallback:', err));
+  }, [user]);
 
   // 🌟 [修復 1] Ref 橋接：確保 Effect 能讀到最新資料，但不觸發 Effect 重新執行
   const transcriptRef = useRef(transcriptHook);
@@ -636,11 +652,7 @@ export default function App() {
     if (peerConnections.current[targetId]) return peerConnections.current[targetId];
 
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-      ],
+      iceServers: iceServersRef.current,   // 🌟 使用預載的 TURN + STUN credentials
       iceCandidatePoolSize: 10,
     });
 
@@ -650,11 +662,34 @@ export default function App() {
     setPeerStatuses(prev => ({ ...prev, [targetId]: 'connecting' }));
 
     pc.oniceconnectionstatechange = () => {
-      setPeerStatuses(prev => ({ ...prev, [targetId]: pc.iceConnectionState as any }));
+      const state = pc.iceConnectionState;
+      setPeerStatuses(prev => ({ ...prev, [targetId]: state as any }));
+      console.log(`[ICE] ${targetId} → ${state}`);
+
+      if (state === 'failed') {
+        // 直接 restart，讓瀏覽器重新蒐集 candidate（包含 TURN relay）
+        console.warn(`[ICE] failed with ${targetId}, restarting ICE...`);
+        pc.restartIce();
+      }
+
+      if (state === 'disconnected') {
+        // disconnected 可能只是短暫抖動，等 5 秒觀察，還沒恢復再 restart
+        setTimeout(() => {
+          if (
+            pc.iceConnectionState === 'disconnected' ||
+            pc.iceConnectionState === 'failed'
+          ) {
+            console.warn(`[ICE] still disconnected with ${targetId}, restarting ICE...`);
+            pc.restartIce();
+          }
+        }, 5000);
+      }
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        // 印出 candidate 類型（debug 用，穩定後可移除）
+        console.log(`[ICE] local candidate → type=${event.candidate.type} proto=${event.candidate.protocol}`);
         socket.emit('webrtc_ice', { target: targetId, candidate: event.candidate });
       }
     };
@@ -674,13 +709,13 @@ export default function App() {
       });
     };
 
-    // createPeerConnection 內改成 let
     let makingOffer = false;
 
     pc.onnegotiationneeded = async () => {
+      // 🌟 先檢查狀態，避免重複發 offer（Signaling Glare 的根源）
       if (makingOffer || pc.signalingState !== 'stable') return;
-      makingOffer = true;
       try {
+        makingOffer = true;
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
@@ -858,29 +893,17 @@ export default function App() {
       
       // 🌟 Initiate WebRTC calls in any voice-enabled phase (角色預覽開始就能通話)
       const VOICE_PHASES = ['room_lobby', 'character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed']; 
-        // 在 room_state 事件的 VOICE_PHASES 區塊內
         if (VOICE_PHASES.includes(state.phase) && newSocket) {
           state.meetingUsers?.forEach((u: any) => {
             if (u.id !== newSocket.id && !u.isAI && !peerConnections.current[u.id]) {
+              // Simple rule to decide who initiates the call (lexicographical order of socket IDs)
               const currentSocketId = newSocket.id || "";
               if (currentSocketId < u.id) {
-                // 如果 stream 還沒準備好，等它準備好再建立連線
-                const setupPeer = () => {
-                  const pc = createPeerConnection(u.id, newSocket);
-                  // onnegotiationneeded 會自動發 offer，不用手動呼叫
-                };
-
-                if (localStreamRef.current) {
-                  setupPeer();
-                } else {
-                  // stream 尚未就緒，短暫 polling 等待
-                  const waitForStream = setInterval(() => {
-                    if (localStreamRef.current) {
-                      clearInterval(waitForStream);
-                      setupPeer();
-                    }
-                  }, 100);
-                }
+                const pc = createPeerConnection(u.id, newSocket);
+                pc.createOffer().then(offer => {
+                  pc.setLocalDescription(offer);
+                  newSocket.emit('webrtc_offer', { target: u.id, sdp: offer });
+                });
               }
             }
           });
