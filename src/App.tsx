@@ -655,6 +655,7 @@ export default function App() {
 
   const createPeerConnection = (targetId: string, socket: Socket, isPolite: boolean) => {
     if (peerConnections.current[targetId]) return peerConnections.current[targetId];
+    console.log('[WebRTC] 建立 pc，ICE servers:', JSON.stringify(iceServersRef.current));
 
     const pc = new RTCPeerConnection({
       iceServers: iceServersRef.current,
@@ -723,7 +724,7 @@ export default function App() {
         // ← 把 if (pc.signalingState !== 'have-local-offer') return; 這行刪掉
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
-        console.error('[WebRTC] Negotiation error:', err);
+        console.error('[WebRTC] offer 處理失敗:', err, '| signalingState:', pc?.signalingState);
       } finally {
         makingOffer = false;
       }
@@ -1065,6 +1066,11 @@ export default function App() {
       try {
         const pc = createPeerConnection(data.sender, newSocket, isPolite);
         const offerCollision = pc.signalingState !== 'stable';
+
+        // 接收方如果是新建的 pc（沒有 transceiver），補加一個
+        if (pc.getTransceivers().length === 0) {
+          pc.addTransceiver('audio', { direction: 'sendrecv' });
+        }
 
         // 強硬方：碰到碰撞直接無視對方的 offer
         if (!isPolite && offerCollision) {
