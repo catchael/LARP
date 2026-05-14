@@ -454,6 +454,7 @@ export default function App() {
   }, [(roomState as any)?.meetingStage]);
 
   // 🌟 進入 truth_revealed 時立刻儲存對話紀錄與觸發分析，不依賴玩家是否按「離開房間」，確保關掉網頁也能留存資料
+  // 🌟 進入 truth_revealed 時儲存對話紀錄與觸發分析
   const hasSavedTruthRef = useRef(false);
   useEffect(() => {
     // 透過 Ref 取得最新狀態，確保讀取到的是「當下最新」的資料快照
@@ -464,101 +465,103 @@ export default function App() {
     // 防禦機制：非真相大白階段、或使用者未登入時不執行
     if (phase !== 'truth_revealed' || !currentUser?.id) return;
     
-    // 防止重複執行（React StrictMode 或相鄰的 State 變動可能觸發兩次）
+    // 防止重複執行
     if (hasSavedTruthRef.current) return;
     hasSavedTruthRef.current = true;
 
-    // 取得當前劇本資訊與玩家角色名稱
-    const currentScript = SCRIPTS.find((s: any) => s.id === currentRoom?.scriptId);
-    const scriptTitle = currentScript?.title || '劇本';
-    const myCharacterName = currentRoom?.users.find((u: any) => u.email === currentUser.email)?.assignedCharacter ?? '';
+    // 🌟 延遲 3 秒執行，讓最後一句話的 STT 有時間飛回來並更新到 Transcript 中
+    setTimeout(() => {
+      // 取得當前劇本資訊與玩家角色名稱
+      const currentScript = SCRIPTS.find((s: any) => s.id === currentRoom?.scriptId);
+      const scriptTitle = currentScript?.title || '劇本';
+      const myCharacterName = currentRoom?.users.find((u: any) => u.email === currentUser.email)?.assignedCharacter ?? '';
 
-    // 1. 整理全場完整對話紀錄（含系統訊息與各輪討論）
-    const packagedDialogue: { speaker: string; text: string }[] = [];
-    for (const round of [1, 2] as const) {
-      const lines = currentTranscript.fullDialogueByRound(round);
-      if (lines.length > 0) {
-        packagedDialogue.push({ speaker: '系統', text: `【第${round === 1 ? '一' : '二'}輪討論】` });
-        packagedDialogue.push(...lines);
-      }
-    }
-
-    console.log('[truth_revealed] packagedDialogue:', packagedDialogue.length, 'entries');
-    console.log('[truth_revealed] transcriptHook entries:', currentTranscript.entries.length);
-
-    // 2. 儲存對話紀錄至後端資料庫
-    if (packagedDialogue.length > 0) {
-      fetch('/api/save-dialogue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: currentUser.id, 
-          scriptName: scriptTitle, 
-          dialogue: packagedDialogue 
-        }),
-      })
-      .then(() => fetchRecords(currentUser.id)) // 儲存成功後更新本地紀錄列表
-      .catch(e => console.error('[Truth] 儲存對話失敗:', e));
-    }
-
-    // 3. 提取玩家個人的發言片段（僅取輪流發言階段，排除自由討論的破碎語音）
-    const myTurns: string[] = [];
-    for (const round of [1, 2]) {
-      const myLines = currentTranscript.turnsByRoundForCharacter(round, myCharacterName);
-      if (myLines.length > 0) {
-        myTurns.push(`[第${round === 1 ? '一' : '二'}輪]\n${myLines.join('\n')}`);
-      }
-    }
-
-    // 4. 若玩家有發言紀錄，則發送 AI 分析請求
-    if (myTurns.length > 0) {
-      setAnalyzingState('analyzing');
-      
-      fetch('/api/analyse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser.id,
-          scriptName: scriptTitle,
-          turns: myTurns,
-          fullDialogue: packagedDialogue,
-          targetCharacter: myCharacterName,
-        }),
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.jobId) {
-          // 啟動輪詢計時器，檢查分析進度
-          const pollInterval = setInterval(async () => {
-            try {
-              const statusRes = await fetch(`/api/analyse/status/${data.jobId}?userId=${currentUser.id}`);
-              const statusData = await statusRes.json();
-              
-              if (statusData.status === 'done') {
-                clearInterval(pollInterval);
-                setAnalyzingState('ready');
-                setReadyReport({ 
-                  summary: statusData.result.summary, 
-                  turns: statusData.result.turns 
-                });
-                fetchRecords(currentUser.id); // 分析完成後再次更新紀錄，確保報告出現在列表
-              } else if (statusData.status === 'error') {
-                clearInterval(pollInterval);
-                setAnalyzingState('idle');
-                console.error('[Analysis] AI 分析任務回傳錯誤');
-              }
-            } catch (pollErr) {
-              console.error('[Analysis] 輪詢分析狀態失敗:', pollErr);
-            }
-          }, 5000); // 每 5 秒檢查一次
+      // 1. 整理全場完整對話紀錄（含系統訊息與各輪討論）
+      const packagedDialogue: { speaker: string; text: string }[] = [];
+      for (const round of [1, 2] as const) {
+        const lines = currentTranscript.fullDialogueByRound(round);
+        if (lines.length > 0) {
+          packagedDialogue.push({ speaker: '系統', text: `【第${round === 1 ? '一' : '二'}輪討論】` });
+          packagedDialogue.push(...lines);
         }
-      })
-      .catch(e => {
-        console.error('[Analysis] 發送分析請求失敗:', e);
-        setAnalyzingState('idle');
-      });
-    }
-  }, [phase]); // 🌟 僅依賴 phase 變動，Transcript 的更新由 Ref 處理
+      }
+
+      console.log('[truth_revealed] 延遲打包完成 packagedDialogue:', packagedDialogue.length, 'entries');
+
+      // 2. 儲存對話紀錄至後端資料庫
+      if (packagedDialogue.length > 0) {
+        fetch('/api/save-dialogue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            userId: currentUser.id, 
+            scriptName: scriptTitle, 
+            dialogue: packagedDialogue 
+          }),
+        })
+        .then(() => fetchRecords(currentUser.id)) 
+        .catch(e => console.error('[Truth] 儲存對話失敗:', e));
+      }
+
+      // 3. 提取玩家個人的發言片段（僅取輪流發言階段）
+      const myTurns: string[] = [];
+      for (const round of [1, 2]) {
+        const myLines = currentTranscript.turnsByRoundForCharacter(round, myCharacterName);
+        if (myLines.length > 0) {
+          myTurns.push(`[第${round === 1 ? '一' : '二'}輪]\n${myLines.join('\n')}`);
+        }
+      }
+
+      // 4. 若玩家有發言紀錄，則發送 AI 分析請求
+      if (myTurns.length > 0) {
+        setAnalyzingState('analyzing');
+        
+        fetch('/api/analyse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: currentUser.id,
+            scriptName: scriptTitle,
+            turns: myTurns,
+            fullDialogue: packagedDialogue,
+            targetCharacter: myCharacterName,
+          }),
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.jobId) {
+            // 啟動輪詢計時器，檢查分析進度
+            const pollInterval = setInterval(async () => {
+              try {
+                const statusRes = await fetch(`/api/analyse/status/${data.jobId}?userId=${currentUser.id}`);
+                const statusData = await statusRes.json();
+                
+                if (statusData.status === 'done') {
+                  clearInterval(pollInterval);
+                  setAnalyzingState('ready');
+                  setReadyReport({ 
+                    summary: statusData.result.summary, 
+                    turns: statusData.result.turns 
+                  });
+                  fetchRecords(currentUser.id); // 分析完成後再次更新紀錄
+                } else if (statusData.status === 'error') {
+                  clearInterval(pollInterval);
+                  setAnalyzingState('idle');
+                  console.error('[Analysis] AI 分析任務回傳錯誤');
+                }
+              } catch (pollErr) {
+                console.error('[Analysis] 輪詢分析狀態失敗:', pollErr);
+              }
+            }, 5000); 
+          }
+        })
+        .catch(e => {
+          console.error('[Analysis] 發送分析請求失敗:', e);
+          setAnalyzingState('idle');
+        });
+      }
+    }, 3000); // 👈 關鍵的 3000 毫秒延遲包住了整個處理邏輯
+  }, [phase]);
 
   const resetRoomState = () => {
 
@@ -720,8 +723,11 @@ export default function App() {
       if (makingOffer || pc.signalingState !== 'stable') return;
       try {
         makingOffer = true;
-        await pc.setLocalDescription();
-        // ← 把 if (pc.signalingState !== 'have-local-offer') return; 這行刪掉
+        // 🌟 改成顯式建立 Offer 並二次檢查狀態
+        const offer = await pc.createOffer();
+        if (pc.signalingState !== 'stable') return; 
+        
+        await pc.setLocalDescription(offer);
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
         console.error('[WebRTC] offer 處理失敗:', err, '| signalingState:', pc?.signalingState);
@@ -1089,6 +1095,13 @@ export default function App() {
           await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
         }
 
+        if (icePendingCandidates[data.sender]?.length) {
+          for (const c of icePendingCandidates[data.sender]) {
+            await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+          }
+          icePendingCandidates[data.sender] = [];
+        }
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         newSocket.emit('webrtc_answer', { target: data.sender, sdp: answer });
@@ -1102,6 +1115,14 @@ export default function App() {
         const pc = peerConnections.current[data.sender];
         if (pc && pc.signalingState === 'have-local-offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          
+          // 🌟 加入這段：清空等待中的 ICE Candidate
+          if (icePendingCandidates[data.sender]?.length) {
+            for (const c of icePendingCandidates[data.sender]) {
+              await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+            }
+            icePendingCandidates[data.sender] = [];
+          }
         }
       } catch (err) {
         console.error('[WebRTC] answer 處理失敗:', err);
@@ -2418,20 +2439,21 @@ export default function App() {
       {phase === 'truth_revealed' && (
         <TruthScreen
           onLeaveRoom={async () => {
+            // 1. 紀錄剛玩完的劇本名稱，給問卷彈窗使用
             const currentScript = SCRIPTS.find((s: any) => s.id === roomState?.scriptId);
             setLastPlayedScript(currentScript?.title || '劇本');
 
-            // 🗑️ 刪除這裡所有打包 packagedDialogue 與打 API 的舊程式碼
-            // 因為上方的 useEffect 已經第一時間幫我們處理好存檔與分析了！
-
-            // 5. 才開始離開
+            // 2. 直接通知後端離開並重置本地狀態
+            // (注意：這裡不需要再寫任何 fetch 或打包對話的程式碼，因為 useEffect 已經處理好了)
             socket?.emit('leave_room');
             resetRoomState();
+            
+            // 3. 顯示問卷引導彈窗
             setShowSurveyPrompt(true);
 
-            // 確保抓取到最新的紀錄列表
+            // 4. 延遲一下下更新紀錄列表，確保能抓到剛存進去的對話
             if (user?.id) {
-              setTimeout(() => fetchRecords(user.id), 3000);
+              setTimeout(() => fetchRecords(user.id), 2000);
             }
           }}
           isMicOn={isMicOn}

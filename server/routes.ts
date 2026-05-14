@@ -55,34 +55,47 @@ if (!process.env.NVIDIA_API_KEY) {
 // ── Keep-alive ping（供 UptimeRobot 監控用）─────────────
 router.get("/ping", (_req, res) => res.json({ ok: true }));
 
-// ── TURN credentials（動態發放，帶有時效性）──────────────
-// credentials 每次都從 Metered API 即時取得，不在前端暴露 API key
 router.get("/turn-credentials", async (_req, res) => {
   try {
-    const appName = process.env.METERED_APP_NAME;
-    const apiKey  = process.env.METERED_API_KEY;
-    if (!appName || !apiKey) {
-      // 沒設定就 fallback：只回傳 Google STUN，不讓請求炸掉
-      return res.json({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+    // 如果環境變數沒抓到，退回使用 Google STUN
+    if (!accountSid || !authToken) {
+      console.warn("[TURN] 缺少 Twilio 金鑰，使用備援 STUN");
+      return res.json({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     }
 
+    // 透過原生的 fetch 呼叫 Twilio API 獲取動態 TURN 憑證
     const response = await fetch(
-      `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${apiKey}`
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Tokens.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+        },
+      }
     );
-    if (!response.ok) throw new Error(`Metered API ${response.status}`);
 
-    const iceServers: any[] = await response.json();
-    // 補上 Google STUN 作為備援（Metered 本身也有 STUN，但多幾個無妨）
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Twilio API 錯誤: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    // Twilio 回傳的欄位是 ice_servers (底線)，我們把它轉存給前端
+    const iceServers = data.ice_servers;
+    
+    // 把 Google STUN 加在最前面當作雙重保險
     iceServers.unshift({ urls: "stun:stun.l.google.com:19302" });
 
-    // 設定 Cache-Control：credential 有效期通常 24h，快取 23h 避免過期
-    res.set("Cache-Control", "private, max-age=82800");
+    // Twilio 的憑證有效時間有限 (TTL預設最高86400秒)，快取設為短一點確保安全
+    res.set("Cache-Control", "private, max-age=3600");
     res.json({ iceServers });
+
   } catch (err: any) {
-    console.error("[TURN] 取得 credentials 失敗:", err.message);
-    // 發生錯誤時 fallback 純 STUN，不讓遊戲直接爆炸
+    console.error("[TURN] 取得 Twilio credentials 失敗:", err.message);
     res.json({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   }
 });
