@@ -720,17 +720,12 @@ export default function App() {
 
     let makingOffer = false;
     pc.onnegotiationneeded = async () => {
-      if (makingOffer || pc.signalingState !== 'stable') return;
       try {
         makingOffer = true;
-        // 🌟 改成顯式建立 Offer 並二次檢查狀態
-        const offer = await pc.createOffer();
-        if (pc.signalingState !== 'stable') return; 
-        
-        await pc.setLocalDescription(offer);
+        await pc.setLocalDescription();
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
-        console.error('[WebRTC] offer 處理失敗:', err, '| signalingState:', pc?.signalingState);
+        console.error('[WebRTC] offer 處理失敗:', err);
       } finally {
         makingOffer = false;
       }
@@ -1071,42 +1066,58 @@ export default function App() {
 
       try {
         const pc = createPeerConnection(data.sender, newSocket, isPolite);
-        const offerCollision = pc.signalingState !== 'stable';
 
-        // 接收方如果是新建的 pc（沒有 transceiver），補加一個
+        // 接收方如果是新建的 pc，補加一個雙向音訊通道
         if (pc.getTransceivers().length === 0) {
           pc.addTransceiver('audio', { direction: 'sendrecv' });
         }
 
-        // 強硬方：碰到碰撞直接無視對方的 offer
+        // 🌟 修正：移除讀不到的 makingOffer，單純依賴 signalingState 判斷
+        const offerCollision = data.sdp.type === 'offer' && pc.signalingState !== 'stable';
+
+        // 🌟 完美協商核心：強硬方忽略碰撞，禮讓方 rollback 退讓
         if (!isPolite && offerCollision) {
           console.warn('[WebRTC] 強硬方忽略碰撞 offer');
           return;
         }
 
-        // 禮讓方：碰到碰撞先 rollback 自己的 offer
-        if (isPolite && offerCollision) {
-          // 只有真的有 local offer 才需要 rollback
-          if (pc.signalingState === 'have-local-offer') {  // ← 加這個判斷
-            await pc.setLocalDescription({ type: 'rollback' });
-          }
-          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        } else {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        // 無論如何，將遠端的 SDP 設定進去 (如果發生碰撞，瀏覽器會自動 rollback)
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+
+        if (data.sdp.type === 'offer') {
+          // 自動根據最新狀態建立 Answer 並設為 LocalDescription
+          await pc.setLocalDescription();
+          newSocket.emit('webrtc_answer', { target: data.sender, sdp: pc.localDescription });
         }
 
+        // 🌟 清空暫存的 ICE Candidate，徹底打通雙向連線
         if (icePendingCandidates[data.sender]?.length) {
           for (const c of icePendingCandidates[data.sender]) {
             await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
           }
           icePendingCandidates[data.sender] = [];
         }
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        newSocket.emit('webrtc_answer', { target: data.sender, sdp: answer });
       } catch (err) {
         console.error('[WebRTC] offer 處理失敗:', err);
+      }
+    });
+
+    newSocket.on('webrtc_answer', async (data: { sender: string, sdp: RTCSessionDescriptionInit }) => {
+      try {
+        const pc = peerConnections.current[data.sender];
+        if (pc && pc.signalingState === 'have-local-offer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          
+          // 🌟 確保收到 Answer 後也清空暫存的 ICE
+          if (icePendingCandidates[data.sender]?.length) {
+            for (const c of icePendingCandidates[data.sender]) {
+              await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+            }
+            icePendingCandidates[data.sender] = [];
+          }
+        }
+      } catch (err) {
+        console.error('[WebRTC] answer 處理失敗:', err);
       }
     });
 
