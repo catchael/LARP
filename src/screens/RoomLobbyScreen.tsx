@@ -5,6 +5,11 @@ import { AppPhase, RoomState, User, cn } from '../types';
 import { SCRIPTS } from '../data/scripts';
 import { ScriptCover } from '../components/ScriptCover';
 
+const proxyAvatar = (url: string) =>
+  url.startsWith('https://api.dicebear.com/')
+    ? `/avatar-proxy?url=${encodeURIComponent(url)}`
+    : url;
+    
 interface RoomLobbyScreenProps {
   roomState: RoomState | null;
   previewScript: typeof SCRIPTS[0] | null;
@@ -200,7 +205,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
                             }}
                           />
                         ) : (
-                          <img src={roomUser.avatar} className="w-full h-full object-cover opacity-50" referrerPolicy="no-referrer" />
+                          <img src={proxyAvatar(roomUser.avatar || '')} className="w-full h-full object-cover opacity-50" referrerPolicy="no-referrer" />
                         )}
                       </div>
                       

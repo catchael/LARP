@@ -33,7 +33,7 @@ async function startServer() {
     // ✅ 加在這裡，startServer() 裡面的 app，所有路由之前
     app.use((req, res, next) => {
       res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-      res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+      res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");  // ← 改這行
       next();
     });
 

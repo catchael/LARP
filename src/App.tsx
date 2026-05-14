@@ -719,7 +719,8 @@ export default function App() {
       if (makingOffer || pc.signalingState !== 'stable') return;
       try {
         makingOffer = true;
-        await pc.setLocalDescription(); // 不用手動 createOffer，直接讓瀏覽器決定
+        await pc.setLocalDescription();
+        // ← 把 if (pc.signalingState !== 'have-local-offer') return; 這行刪掉
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
         console.error('[WebRTC] Negotiation error:', err);
@@ -1073,10 +1074,11 @@ export default function App() {
 
         // 禮讓方：碰到碰撞先 rollback 自己的 offer
         if (isPolite && offerCollision) {
-          await Promise.all([
-            pc.setLocalDescription({ type: 'rollback' }),
-            pc.setRemoteDescription(new RTCSessionDescription(data.sdp)),
-          ]);
+          // 只有真的有 local offer 才需要 rollback
+          if (pc.signalingState === 'have-local-offer') {  // ← 加這個判斷
+            await pc.setLocalDescription({ type: 'rollback' });
+          }
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
         } else {
           await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
         }
