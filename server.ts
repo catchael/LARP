@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 import { Server } from "socket.io";
 import http from "http";
 
-import apiRouter from "./server/routes.js";
+import apiRouter from "./server/routes.js";          // ← 只留這一個
 import { registerSocketHandlers } from "./server/socket.js";
 import { initDb } from "./server/db.js";
 
@@ -25,24 +25,26 @@ async function startServer() {
     const server = http.createServer(app);
     const io = new Server(server, {
       cors: { origin: "*" },
-      // 保留預設 polling → websocket 升級流程，避免在 Vite middleware 模式下連線失敗
       pingTimeout: 60000,
       pingInterval: 25000,
       maxHttpBufferSize: 1e6,
     });
 
+    // ✅ 加在這裡，startServer() 裡面的 app，所有路由之前
+    app.use((req, res, next) => {
+      res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+      res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+      next();
+    });
+
     app.use(express.json());
 
-    // 初始化資料庫（建立資料表）
     await initDb();
 
-    // REST API（全部掛在 /api 前綴下）
     app.use("/api", apiRouter);
 
-    // Socket.IO 事件
     registerSocketHandlers(io);
 
-    // 靜態資源 / Vite dev middleware
     if (process.env.NODE_ENV !== "production") {
       try {
         const vite = await createViteServer({
