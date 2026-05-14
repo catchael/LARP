@@ -227,10 +227,26 @@ export default function App() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const recognitionRef = useRef<any>(null);
   const recognitionActiveRef = useRef(false);
-  const isMicRequestingRef = useRef(false); // ✅ 防止重複請求麥克風
+  const isMicRequestingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const roomStateRef = useRef<RoomState | null>(null);
+  // TURN credentials 快取（預設 Google STUN，登入後換成 Metered TURN+STUN）
+  const iceServersRef = useRef<RTCIceServer[]>([{ urls: 'stun:stun.l.google.com:19302' }]);
   useEffect(() => { roomStateRef.current = roomState; }, [roomState]);
+
+  // 登入後預載 TURN credentials，之後建立 peer connection 直接用快取
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/turn-credentials')
+      .then(r => r.json())
+      .then(({ iceServers }) => {
+        if (Array.isArray(iceServers) && iceServers.length > 0) {
+          iceServersRef.current = iceServers;
+          console.log('[TURN] credentials 載入完成，共', iceServers.length, '個 server');
+        }
+      })
+      .catch(err => console.warn('[TURN] credentials 載入失敗，使用 STUN fallback:', err));
+  }, [user]);
 
   // 🌟 [修復 1] Ref 橋接：確保 Effect 能讀到最新資料，但不觸發 Effect 重新執行
   const transcriptRef = useRef(transcriptHook);
@@ -636,68 +652,90 @@ export default function App() {
     if (peerConnections.current[targetId]) return peerConnections.current[targetId];
 
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-      ],
+      iceServers: iceServersRef.current,
       iceCandidatePoolSize: 10,
     });
 
-    // 🌟 核心修正：強制建立音訊雙向通道，確保後續操作不用重新協商 (避免 Signaling Glare)
+    // 強制建立音訊雙向通道（只加一次，之後 replaceTrack 換音軌，不再重新協商）
     pc.addTransceiver('audio', { direction: 'sendrecv' });
 
     setPeerStatuses(prev => ({ ...prev, [targetId]: 'connecting' }));
 
+    // ── ICE 狀態監控 + 自動 restart ──────────────────────────
     pc.oniceconnectionstatechange = () => {
-      setPeerStatuses(prev => ({ ...prev, [targetId]: pc.iceConnectionState as any }));
+      const state = pc.iceConnectionState;
+      setPeerStatuses(prev => ({ ...prev, [targetId]: state as any }));
+      console.log(`[ICE] ${targetId} → ${state}`);
+
+      if (state === 'failed') {
+        console.warn(`[ICE] failed with ${targetId}, restarting...`);
+        pc.restartIce();
+      }
+      if (state === 'disconnected') {
+        setTimeout(() => {
+          if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+            console.warn(`[ICE] still disconnected with ${targetId}, restarting...`);
+            pc.restartIce();
+          }
+        }, 5000);
+      }
     };
 
+    // ── ICE candidate 轉發 ───────────────────────────────────
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit('webrtc_ice', { target: targetId, candidate: event.candidate });
       }
     };
 
+    // ── 遠端音軌到來：綁到 <audio> 元素 ────────────────────────
     pc.ontrack = (event) => {
-      const remoteStream = event.streams[0] || new MediaStream([event.track]);
-      let audio = document.getElementById(`audio-${targetId}`) as HTMLAudioElement;
+      const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
+      let audio = document.getElementById(`audio-${targetId}`) as HTMLAudioElement | null;
       if (!audio) {
         audio = document.createElement('audio');
         audio.id = `audio-${targetId}`;
         audio.autoplay = true;
         document.body.appendChild(audio);
       }
-      audio.srcObject = remoteStream;
-      audio.play().catch(e => {
-        console.error("Audio play failed", e);
+      // 先清掉舊的 srcObject 再設新的，避免 AbortError
+      if (audio.srcObject !== remoteStream) {
+        audio.srcObject = null;
+        audio.srcObject = remoteStream;
+      }
+      audio.play().catch(err => {
+        // AbortError 通常是 srcObject 被換掉才剛 play，不是真正的錯誤
+        if (err.name !== 'AbortError') console.error('[Audio] play failed:', err);
       });
     };
 
-    // ✅ 用 let 而非 useRef — createPeerConnection 不是 React 元件，不能呼叫 Hook
+    // ── Offer / 重新協商（只有 initiator 會觸發）────────────────
+    // 用 let 而非 useRef：createPeerConnection 不是 React 元件，不能呼叫 Hook
     let makingOffer = false;
 
     pc.onnegotiationneeded = async () => {
-      // 先檢查狀態，避免重複發 offer（Signaling Glare 的根源）
+      // 先擋，避免 Signaling Glare：同時兩端都在建 offer
       if (makingOffer || pc.signalingState !== 'stable') return;
       try {
         makingOffer = true;
         const offer = await pc.createOffer();
+        // 再次確認，因為 createOffer() 是 async
+        if (pc.signalingState !== 'stable') return;
         await pc.setLocalDescription(offer);
         socket.emit('webrtc_offer', { target: targetId, sdp: pc.localDescription });
       } catch (err) {
-        console.error("Negotiation error", err);
+        console.error('[WebRTC] Negotiation error:', err);
       } finally {
         makingOffer = false;
       }
     };
 
-    // 🌟 若麥克風已就緒，將音軌直接綁入剛建立的通道中
+    // ── 若麥克風已就緒，直接綁入通道（不觸發重新協商）──────────
     if (localStreamRef.current) {
       const track = localStreamRef.current.getAudioTracks()[0];
       const sender = pc.getSenders()[0];
       if (sender && track) {
-        sender.replaceTrack(track).catch(e => console.warn(e));
+        sender.replaceTrack(track).catch(e => console.warn('[WebRTC] replaceTrack:', e));
       }
     }
 
@@ -857,19 +895,16 @@ export default function App() {
         });
       }
       
-      // 🌟 Initiate WebRTC calls in any voice-enabled phase (角色預覽開始就能通話)
+      // 進入語音階段時，只建立 PeerConnection；offer 由 onnegotiationneeded 自動發出
       const VOICE_PHASES = ['room_lobby', 'character_preview', 'game_profile', 'mission_briefing', 'game_search', 'search_end', 'game_meeting', 'truth_revealed']; 
         if (VOICE_PHASES.includes(state.phase) && newSocket) {
           state.meetingUsers?.forEach((u: any) => {
             if (u.id !== newSocket.id && !u.isAI && !peerConnections.current[u.id]) {
-              // Simple rule to decide who initiates the call (lexicographical order of socket IDs)
               const currentSocketId = newSocket.id || "";
+              // 字典序較小的那方負責發 offer，避免雙方同時發
               if (currentSocketId < u.id) {
-                const pc = createPeerConnection(u.id, newSocket);
-                pc.createOffer().then(offer => {
-                  pc.setLocalDescription(offer);
-                  newSocket.emit('webrtc_offer', { target: u.id, sdp: offer });
-                });
+                createPeerConnection(u.id, newSocket);
+                // ❌ 不手動 createOffer()，onnegotiationneeded 加完 transceiver 後自動觸發
               }
             }
           });
@@ -1029,7 +1064,7 @@ export default function App() {
     newSocket.on('webrtc_offer', async (data: { sender: string, sdp: RTCSessionDescriptionInit }) => {
       try {
         const pc = createPeerConnection(data.sender, newSocket);
-        // ICE restart offer 進來時 signalingState 可能是 have-local-offer，需要 rollback
+        // ICE restart 進來時本地可能是 have-local-offer，需要先 rollback
         if (pc.signalingState !== 'stable') {
           await pc.setLocalDescription({ type: 'rollback' });
         }
@@ -1045,7 +1080,7 @@ export default function App() {
     newSocket.on('webrtc_answer', async (data: { sender: string, sdp: RTCSessionDescriptionInit }) => {
       try {
         const pc = peerConnections.current[data.sender];
-        if (pc && pc.signalingState !== 'stable') {
+        if (pc && pc.signalingState === 'have-local-offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
         }
       } catch (err) {
@@ -1372,14 +1407,13 @@ export default function App() {
       analyserRef.current = analyser;
       micSourceRef.current = microphone;
 
-      // 🌟 AudioContext 硬體錯誤自動恢復（藍牙切換、裝置拔插等）
+      // AudioContext 硬體錯誤自動恢復（切換音訊裝置、藍牙斷線等）
       const rebuildAudioContext = async () => {
         const ctx = audioContextRef.current;
-        if (!ctx) return;
-        if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
-          try { await ctx.resume(); return; } catch (_) {}
-        }
-        // resume 無效，重建整個 context
+        if (!ctx || ctx.state === 'running') return;
+        try { await ctx.resume(); } catch (_) {}
+        if (audioContextRef.current?.state === 'running') return;
+        // resume 無效，整個重建
         try { await ctx.close(); } catch (_) {}
         const newCtx = new AudioContext();
         const newAnalyser = newCtx.createAnalyser();
