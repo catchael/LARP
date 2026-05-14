@@ -261,7 +261,6 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
         '洗清自己的殺人嫌疑： 別人一定會死咬你身上的「抓痕、濕袖口、重泥沙」。',
       ],
       hiddenTasks: [
-        '利用「雨傘」死死咬住尹夫人： 全場唯一知道尹夫人「帶傘出門」的人！當尹夫人試圖把髒水潑給你，或聲稱自己只是來晨跑避雨時，你必須當眾揭穿她的謊言！',
         '質疑警察的失職： 身為警衛，你很清楚巡邏警察的路線。為什麼案發前後，這個生態公園附近完全沒有警察巡邏？'
       ],
       initialClues: [
@@ -298,7 +297,7 @@ export const PERSONAL_MISSIONS: Record<number, Record<string, PersonalMission>> 
         '查出開槍的真兇',
       ],
       hiddenTasks: [
-        '打死不認那支拋棄式手機： 一旦有人搜出那支寫著「清空警力」的手機，你必須展現出警察的威嚴拼死狡辯！',
+        '打死不認那支拋棄式手機： 一旦有人搜出那支手機，你必須展現出警察的威嚴拼死狡辯！',
         '掌控局勢，見機行事'
       ],
       initialClues: [
