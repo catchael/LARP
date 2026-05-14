@@ -1523,7 +1523,12 @@ export default function App() {
     // Re-start immediately when it ends, as long as mic is still active.
     recognition.onend = () => {
       if (recognitionActiveRef.current) {
-        try { recognition.start(); } catch (_) {}
+        // 🌟 關鍵修復：加入 1000 毫秒的延遲，防止 API 異常時引發無限迴圈當機
+        setTimeout(() => {
+          if (recognitionActiveRef.current) {
+            try { recognition.start(); } catch (_) {}
+          }
+        }, 1000);
       }
     };
 

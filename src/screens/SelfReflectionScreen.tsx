@@ -50,8 +50,17 @@ const warm = {
 // ── 主組件 ──────────────────────────────────────────────────
 
 export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfReflectionProps) {
-  const [subStep, setSubStep] = useState<'menu' | 'cognitive' | 'clarity' | 'coherence'>('menu');
+  const [subStep, setSubStep] = useState<'menu' | 'cognitive' | 'clarity' | 'coherence' | 'waiting'>('menu');
   const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
+  const hasSubmitted = React.useRef(false);
+
+  // 🌟 2. 新增：攔截完成事件，切換到等待畫面
+  const handleSubComplete = (data: any) => {
+    if (hasSubmitted.current) return;
+    hasSubmitted.current = true;
+    setSubStep('waiting');
+    onComplete(data);
+  };
 
   // 倒數計時
   useEffect(() => {
@@ -59,8 +68,8 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          // 時間到自動完成，傳空資料
-          onComplete({ timedOut: true });
+          // 🌟 3. 修改：時間到自動完成時，也要走攔截器切換到等待畫面
+          handleSubComplete({ timedOut: true });
           return 0;
         }
         return prev - 1;
@@ -104,6 +113,23 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
       {mins}:{secs}
     </div>
   );
+
+  // 🌟 4. 新增：如果進入 waiting 狀態，渲染等待畫面
+  if (subStep === 'waiting') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="fixed inset-0 bg-amber-50 flex flex-col items-center justify-center z-10"
+      >
+        <div className="bg-white p-10 rounded-3xl shadow-xl border border-amber-100 flex flex-col items-center text-center max-w-sm mx-4">
+          <div className="w-16 h-16 border-4 border-amber-100 border-t-orange-500 rounded-full animate-spin mb-6" />
+          <h2 className="text-2xl font-black text-stone-800 mb-2">檢核完成！</h2>
+          <p className="text-stone-500 font-medium">請稍候，等待其他玩家完成檢核...</p>
+        </div>
+      </motion.div>
+    );
+  }
 
   // ── Menu ─────────────────────────────────────────────────
 
@@ -152,7 +178,7 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
       <CognitiveScreen
         transcript={transcript}
         onBack={() => setSubStep('menu')}
-        onComplete={onComplete}
+        onComplete={handleSubComplete} // 🌟 5. 修改：綁定攔截器
         TranscriptBlock={TranscriptBlock}
         Timer={Timer}
       />
@@ -166,7 +192,7 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
       <ClarityScreen
         transcript={transcript}
         onBack={() => setSubStep('menu')}
-        onComplete={onComplete}
+        onComplete={handleSubComplete} // 🌟 5. 修改：綁定攔截器
         TranscriptBlock={TranscriptBlock}
         Timer={Timer}
       />
@@ -183,7 +209,7 @@ export function SelfReflectionScreen({ transcript, clues, onComplete }: SelfRefl
         timeLeft={timeLeft}
         timerUrgent={timerUrgent}
         onBack={() => setSubStep('menu')}
-        onComplete={onComplete}
+        onComplete={handleSubComplete} // 🌟 5. 修改：綁定攔截器
         TranscriptBlock={TranscriptBlock}
         Timer={Timer}
       />
