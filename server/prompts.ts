@@ -34,7 +34,7 @@ export const MODELS = {
   P1_TYPE:             "meta/llama-3.1-8b-instruct",    // 類型判定（小任務，8b 足夠）
   P2_LOGIC:            "qwen/qwen3.5-122b-a10b", // 邏輯分析（原 gpt-oss-120b）
   P3_ACCESSIBILITY:    "meta/llama-3.3-70b-instruct",   // 理解分析（原 nemotron-3-super）
-  P4_STRUCTURE:        "qwen/qwen3-30b-a3b-instruct",   // 結構分析（輕量）
+  P4_STRUCTURE:        "qwen/qwen3-next-80b-a3b-instruct",   // 結構分析（輕量）
   P_JUDGE:             "openai/gpt-oss-120b",   // 裁判
 } as const;
 
@@ -48,6 +48,9 @@ export const P0_STT = `你是繁體中文語音逐字稿校對員，熟悉劇本
 4. 遇到不確定的詞，保留原文
 5. 不得刪詞、加詞、重組句子
 6. 輸出長度與輸入差距 ≤ 5%
+7. 若同一詞語連續重複出現 4 次以上，保留 2 次即可，其餘刪除
+8. 若出現非中文字元（日文、韓文、英文單字、符號亂碼等），且無法判斷為正常引用，直接刪除該片段
+9. 若出現連續 10 字以上完全無法對應正常中文語意的內容（亂碼、幻覺生成），整段刪除
 輸入逐字稿：{raw}
 直接輸出修復後文字，無需任何說明。`;
 
