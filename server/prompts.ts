@@ -21,15 +21,21 @@ P0_STT
 // 流程：音檔 ──[STT_AUDIO]──> 原始逐字稿 ──[P0_STT]──> 修正後逐字稿 ──> ...
 //
 // 注意：P1_TYPE 只輸出 JSON {type}，不再產生黃金答案
+// ── 模型替換說明 ──────────────────────────────────────────
+// gpt-oss-120b 與 nemotron-3-super-120b 輸出容易被截斷（finish_reason=length），
+// 改用以下等效但更穩定的模型：
+//   P2_LOGIC:         qwen/qwen3-235b-a22b-instruct-fp8（推理能力強，輸出穩定）
+//   P3_ACCESSIBILITY: meta/llama-3.3-70b-instruct（快速，極少截斷）
+//   P4_STRUCTURE:     qwen/qwen3-30b-a3b-instruct（輕量，結構分析足夠）
 export const MODELS = {
-  STT_AUDIO:           "deepgram/nova-2",                // 音檔 → 文字（nova-3 不支援中文）
-  P0_STT:              "meta/llama-3.1-8b-instruct",       // 文字校對（推薦：Qwen 中文強）
-  P0_CONTEXT_SUMMARY:  "meta/llama-3.3-70b-instruct",
-  P1_TYPE:             "meta/llama-3.3-70b-instruct",    // 類型判定
-  P2_LOGIC:            "openai/gpt-oss-120b",
-  P3_ACCESSIBILITY:    "nvidia/nemotron-3-super-120b-a12b",
-  P4_STRUCTURE:        "qwen/qwen3-next-80b-a3b-instruct",
-  P_JUDGE:             "meta/llama-3.3-70b-instruct",
+  STT_AUDIO:           "deepgram/nova-2",               // 音檔 → 文字
+  P0_STT:              "meta/llama-3.1-8b-instruct",    // 文字校對
+  P0_CONTEXT_SUMMARY:  "meta/llama-3.3-70b-instruct",  // 摘要
+  P1_TYPE:             "meta/llama-3.1-8b-instruct",    // 類型判定（小任務，8b 足夠）
+  P2_LOGIC:            "qwen/qwen3.5-122b-a10b", // 邏輯分析（原 gpt-oss-120b）
+  P3_ACCESSIBILITY:    "meta/llama-3.3-70b-instruct",   // 理解分析（原 nemotron-3-super）
+  P4_STRUCTURE:        "qwen/qwen3-30b-a3b-instruct",   // 結構分析（輕量）
+  P_JUDGE:             "openai/gpt-oss-120b",   // 裁判
 } as const;
 
 
