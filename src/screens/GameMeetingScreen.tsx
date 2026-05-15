@@ -1204,13 +1204,26 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
         </div>
       
 
+      {/* ── pre_round_organizing 固定提醒橫幅（彈窗關閉後持續顯示） ── */}
+      {meetingStage === 'pre_round_organizing' && dismissedPreOrganizeAlert && (
+        <div className="shrink-0 bg-indigo-950/90 border-t border-indigo-600/50 px-6 py-3 flex items-center gap-4">
+          <div className="w-2 h-2 rounded-full bg-indigo-400 shrink-0 animate-pulse" />
+          <p className="text-slate-200 text-sm leading-relaxed flex-1">
+            接下來的輪流發言，
+            <span className="text-indigo-300 font-black mx-1 text-base">每個人只有 2 分鐘發言時間</span>，
+            請先想好怎麼講，精煉你的語言，在輪流發言時流暢地說出。
+            <span className="text-amber-400 font-bold ml-2">這將影響你的評分結果。</span>
+          </p>
+        </div>
+      )}
+
       {/* 階段標示條 — 固定在底部 mic bar 上方，不遮擋其他 UI */}
       {(() => {
         const stageInfo: Record<string, { label: string; desc: string; color: string }> = {
-          pre_round_organizing: { label: '發言前準備', desc: '整理思路，準備好後點擊已就緒', color: 'bg-indigo-900/80 border-indigo-700 text-indigo-200' },
-          round_robin:          { label: '輪流發言',   desc: isMyTurn ? '輪到你了，請開啟麥克風' : `目前發言：${(currentSpeaker as any)?.character ?? '—'}`, color: isMyTurn ? 'bg-emerald-900/80 border-emerald-600 text-emerald-200' : 'bg-slate-800/90 border-slate-600 text-slate-300' },
-          organizing:           { label: '整理思緒',   desc: '所有人發言完畢，準備好後點擊已就緒', color: 'bg-amber-900/80 border-amber-700 text-amber-200' },
-          free_discussion:      { label: '自由討論',   desc: '開放討論，可自由開麥發言', color: 'bg-teal-900/80 border-teal-700 text-teal-200' },
+          pre_round_organizing: { label: '整理思緒（5分鐘）', desc: '準備好後點擊已就緒 — 輪流發言每人限 2 分鐘', color: 'bg-indigo-900/80 border-indigo-700 text-indigo-200' },
+          round_robin:          { label: '輪流發言（每人 2 分鐘）', desc: isMyTurn ? '輪到你了，請開啟麥克風' : `目前發言：${(currentSpeaker as any)?.character ?? '—'}`, color: isMyTurn ? 'bg-emerald-900/80 border-emerald-600 text-emerald-200' : 'bg-slate-800/90 border-slate-600 text-slate-300' },
+          organizing:           { label: '整理思緒（5分鐘）', desc: '所有人發言完畢，準備好後點擊已就緒', color: 'bg-amber-900/80 border-amber-700 text-amber-200' },
+          free_discussion:      { label: '自由討論（3.5分鐘）', desc: '開放討論，可自由開麥發言', color: 'bg-teal-900/80 border-teal-700 text-teal-200' },
           voting_prompt:        { label: '是否延長討論', desc: '請投票決定是否繼續討論', color: 'bg-rose-900/80 border-rose-700 text-rose-200' },
         };
         const info = stageInfo[meetingStage];
@@ -1406,11 +1419,28 @@ export const GameMeetingScreen: React.FC<GameMeetingScreenProps> = ({
         {/* 🌟 階段零：發言前準備時間 */}
         {meetingStage === 'pre_round_organizing' && !dismissedPreOrganizeAlert && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
-            <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-md shadow-2xl">
-              <h2 className="text-3xl font-black text-indigo-400 mb-4 tracking-widest text-shadow-sm">發言前準備</h2>
-              <p className="text-slate-300 text-lg mb-8 leading-relaxed">
-                即將開始輪流發言！<br/>請利用這段時間整理你的線索與時間線，並準備好你的說詞。<br/><br/>
-                <span className="text-emerald-400 font-bold">準備好後，請點擊右下角的「已就緒」。</span>
+            <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-lg shadow-2xl">
+              <h2 className="text-3xl font-black text-indigo-400 mb-4 tracking-widest">整理思緒</h2>
+              <p className="text-slate-300 text-lg mb-6 leading-relaxed">
+                請利用這 <span className="text-white font-bold">5 分鐘</span> 整理你的線索與推理，準備好你的說詞。
+              </p>
+
+              {/* ── 固定提醒橫幅 ── */}
+              <div className="bg-indigo-950 border border-indigo-500/60 rounded-2xl px-6 py-5 mb-6 text-left">
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 rounded-full bg-indigo-400 mt-2 shrink-0 animate-pulse" />
+                  <p className="text-slate-200 text-base leading-relaxed">
+                    接下來的輪流發言，
+                    <span className="text-indigo-300 font-black text-lg mx-1">每個人只有 2 分鐘發言時間</span>，
+                    請在此階段先想好怎麼講，精煉你的語言，在輪流發言時流暢地說出。
+                    <br/>
+                    <span className="text-amber-400 font-bold mt-2 block">這將會影響你的評分結果。</span>
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-slate-400 text-sm mb-6">
+                準備好後，請點擊右下角的「已就緒」。
               </p>
               <button
                 onClick={() => setDismissedPreOrganizeAlert(true)}

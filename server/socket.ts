@@ -88,7 +88,7 @@ interface Room {
 
 // ── 常數 ──────────────────────────────────────────────────
 
-const TURN_DURATION = 5 * 60 * 1000;
+const TURN_DURATION = 2 * 60 * 1000; // 輪流發言每人 2 分鐘
 const SILENCE_LIMIT = 10 * 1000;
 const WARNING_DURATION = 5 * 1000;
 
@@ -266,10 +266,10 @@ export function registerSocketHandlers(io: Server) {
       if (room.silenceCheckInterval) clearInterval(room.silenceCheckInterval);
       if (room.turnTimeout) clearTimeout(room.turnTimeout);
 
-      room.phaseEndTime = Date.now() + 120 * 1000;
+      room.phaseEndTime = Date.now() + 300 * 1000; // 整理思緒 5 分鐘
       room.phaseTimeout = setTimeout(() => {
         startRoundRobin(roomId);
-      }, 120 * 1000);
+      }, 300 * 1000);
     } else {
       // 🌟 修改這裡：其他階段如果傳入 0 就不設定倒數
       if (durationSeconds > 0) {
@@ -331,7 +331,7 @@ export function registerSocketHandlers(io: Server) {
     if (room.silenceCheckInterval) clearInterval(room.silenceCheckInterval);
     if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
 
-    room.phaseEndTime = Date.now() + 120 * 1000;
+    room.phaseEndTime = Date.now() + 300 * 1000; // 整理思緒 5 分鐘
     room.phaseTimeout = setTimeout(() => { 
       // 🌟 第一輪直接進討論；第二輪則彈出詢問
       if (room.currentRound === 1) {
@@ -339,7 +339,7 @@ export function registerSocketHandlers(io: Server) {
       } else {
         startVotingPromptStage(roomId);
       }
-    }, 120 * 1000);
+    }, 300 * 1000);
     io.to(roomId).emit('room_state', getRoomState(roomId));
     broadcastMeetingState(roomId);
   }
@@ -371,7 +371,7 @@ export function registerSocketHandlers(io: Server) {
     room.meetingReadyUsers = new Set();
     
     if (room.phaseTimeout) clearTimeout(room.phaseTimeout);
-    room.phaseEndTime = Date.now() + 300 * 1000;
+    room.phaseEndTime = Date.now() + 210 * 1000; // 自由討論 3.5 分鐘
     room.phaseTimeout = setTimeout(() => { 
       if (room.scriptId === 2) {
         // 劇本 2：每次自由討論結束先進 self_reflection
@@ -383,7 +383,7 @@ export function registerSocketHandlers(io: Server) {
       } else {
         startPhase(roomId, 'game_voting', 180);
       }
-    }, 300 * 1000);
+    }, 210 * 1000);
     io.to(roomId).emit('room_state', getRoomState(roomId));
   }
 
@@ -827,13 +827,6 @@ export function registerSocketHandlers(io: Server) {
     });
 
     socket.on('disconnect', () => {
-      // 清除以這個 socket 為 sender 的所有 ICE buffer，避免 memory leak
-      Object.keys(iceCandidateBuffers).forEach(key => {
-        if (key.startsWith(`${socket.id}->`) || key.endsWith(`->${socket.id}`)) {
-          delete iceCandidateBuffers[key];
-        }
-      });
-
       if (!currentRoomId) return;
       const roomId = currentRoomId as string;
       const room = rooms.get(roomId);
@@ -1372,83 +1365,33 @@ export function registerSocketHandlers(io: Server) {
     });
 
     // ── WebRTC 信令 ────────────────────────────────────────
-    //
-    // 修復兩個問題：
-    // 1. [ICE] still disconnected / restarting：
-    //    原因：ICE candidate 在 setRemoteDescription 完成前就到達，被瀏覽器丟棄。
-    //    修法：改在 server 端 buffer ICE，offer/answer 收到後立即 flush；
-    //          另外保留雙向 buffer key，不論哪端先送 offer 都能正確 flush。
-    //
-    // 2. 強硬方忽略碰撞 offer（glare / offer collision）：
-    //    原因：兩端同時送 offer，導致雙方都收到 offer 卻沒有對應 answer。
-    //    修法：加入 「polite peer」 協議 —— server 轉發 offer 時附帶
-    //          sender socketId，前端比較自己與對方 id 大小決定誰「禮讓」。
-    //          禮讓方收到 offer 時先 rollback 自己的 offer，再處理對方的。
-    //          （server 端無需改邏輯，靠附帶的 sender id 讓前端判斷）
-    //
-    // 注意：前端 RTCPeerConnection 需配合設定 `onnegotiationneeded` 與
-    //       碰撞偵測邏輯，詳見下方前端修改說明。
 
     socket.on('webrtc_offer', (data) => {
-      // 轉發 offer，附帶 sender id 供前端做 polite-peer 碰撞判斷
-      io.to(data.target).emit('webrtc_offer', {
-        sender: socket.id,
-        sdp: data.sdp,
-        // polite peer：target 的 socketId < sender 的 socketId 時，target 禮讓
-        politeIfSmaller: true,
-      });
-
-      // offer 送達後，立即 flush 雙向已暫存的 ICE candidates
-      // 正向：sender 先送了 ICE，buffer key = sender->target
-      const keyFwd = `${socket.id}->${data.target}`;
-      if (iceCandidateBuffers[keyFwd]?.length) {
-        iceCandidateBuffers[keyFwd].forEach(candidate => {
+      io.to(data.target).emit('webrtc_offer', { sender: socket.id, sdp: data.sdp });
+      // Flush buffered ICE candidates for this pair
+      const key = `${data.target}->${socket.id}`;
+      if (iceCandidateBuffers[key]?.length) {
+        iceCandidateBuffers[key].forEach(candidate => {
           io.to(data.target).emit('webrtc_ice', { sender: socket.id, candidate });
         });
-        iceCandidateBuffers[keyFwd] = [];
-      }
-      // 反向：target 已暫存給 sender 的 ICE（對方先送的情況）
-      const keyRev = `${data.target}->${socket.id}`;
-      if (iceCandidateBuffers[keyRev]?.length) {
-        iceCandidateBuffers[keyRev].forEach(candidate => {
-          io.to(data.target).emit('webrtc_ice', { sender: socket.id, candidate });
-        });
-        iceCandidateBuffers[keyRev] = [];
+        iceCandidateBuffers[key] = [];
       }
     });
 
     socket.on('webrtc_answer', (data) => {
       io.to(data.target).emit('webrtc_answer', { sender: socket.id, sdp: data.sdp });
-
-      // answer 送達後，flush 雙向 ICE buffer
-      const keyFwd = `${socket.id}->${data.target}`;
-      if (iceCandidateBuffers[keyFwd]?.length) {
-        iceCandidateBuffers[keyFwd].forEach(candidate => {
+      // Flush buffered candidates in both directions
+      const key = `${socket.id}->${data.target}`;
+      if (iceCandidateBuffers[key]?.length) {
+        iceCandidateBuffers[key].forEach(candidate => {
           io.to(data.target).emit('webrtc_ice', { sender: socket.id, candidate });
         });
-        iceCandidateBuffers[keyFwd] = [];
-      }
-      const keyRev = `${data.target}->${socket.id}`;
-      if (iceCandidateBuffers[keyRev]?.length) {
-        iceCandidateBuffers[keyRev].forEach(candidate => {
-          io.to(data.target).emit('webrtc_ice', { sender: socket.id, candidate });
-        });
-        iceCandidateBuffers[keyRev] = [];
+        iceCandidateBuffers[key] = [];
       }
     });
 
     socket.on('webrtc_ice', (data) => {
-      const targetSocket = io.sockets.sockets.get(data.target);
-      if (targetSocket) {
-        // 目標在線，直接轉發
-        io.to(data.target).emit('webrtc_ice', { sender: socket.id, candidate: data.candidate });
-      } else {
-        // 目標還沒連線或尚未設定 remote description，先 buffer
-        const key = `${socket.id}->${data.target}`;
-        if (!iceCandidateBuffers[key]) iceCandidateBuffers[key] = [];
-        iceCandidateBuffers[key].push(data.candidate);
-      }
+      io.to(data.target).emit('webrtc_ice', { sender: socket.id, candidate: data.candidate });
     });
-
   });
 }
