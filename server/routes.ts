@@ -14,6 +14,16 @@ import { Readable, PassThrough } from "stream";
 import { getScript, ScriptMeta } from "./entity.js";
 import { MODELS } from "./prompts.js";
 
+// routes.ts 頂端，import 區塊下面
+console.log("[NVIDIA routes] 啟動檢查 ──");
+const _k = process.env.NVIDIA_API_KEY;
+console.log("  key 存在:", !!_k);
+console.log("  key 長度:", _k?.length);
+console.log("  前 4 碼 (含引號顯示空白):", JSON.stringify(_k?.slice(0, 4)));
+console.log("  後 4 碼 (含引號顯示空白):", JSON.stringify(_k?.slice(-4)));
+console.log("  是否含換行:", _k?.includes("\n") || _k?.includes("\r"));
+console.log("  trim 後長度:", _k?.trim().length);
+
 const SCRIPT_ID_MAP: Record<string, string> = {
   "1": "suffocation",
   "2": "script_02",
@@ -44,12 +54,99 @@ async function webmToWav16k(input: Buffer): Promise<Buffer> {
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-const nvidiaClient = new OpenAI({
-  baseURL: "https://integrate.api.nvidia.com/v1",
-  apiKey: process.env.NVIDIA_API_KEY || "",
-});
-if (!process.env.NVIDIA_API_KEY) {
-  console.warn("⚠️ NVIDIA_API_KEY 未設定，語音名詞修正與分析會 401");
+// ── NVIDIA Client：lazy 建立，避免 import 時 .env 還沒載入完 ──
+let _nvidiaClient: OpenAI | null = null;
+function getNvidiaClient(): OpenAI {
+  if (!_nvidiaClient) {
+    // routes.ts，getNvidiaClient() 裡
+    const apiKey = process.env.NVIDIA_API_KEY?.trim();
+    console.log("[NVIDIA routes] key 長度:", apiKey?.length);
+    console.log("[NVIDIA routes] key 前後有無空白:", JSON.stringify(apiKey?.slice(0,4)), JSON.stringify(apiKey?.slice(-4)));
+    if (!apiKey) {
+      console.warn("⚠️ NVIDIA_API_KEY 未設定，語音名詞修正與分析會 401");
+    } else {
+      console.log("[NVIDIA] key 前 8 字元 =", apiKey.slice(0, 8), "長度 =", apiKey.length);
+    }
+    _nvidiaClient = new OpenAI({
+      baseURL: "https://integrate.api.nvidia.com/v1",
+      apiKey: apiKey || "",
+    });
+  }
+  return _nvidiaClient;
+}
+
+// ── Whisper 幻覺清理 ──────────────────────────────────────
+// 三層偵測：截斷已知幻覺起點 → 整段檢查日韓文比例 → 過濾純標點
+function cleanWhisperHallucination(text: string): {
+  cleaned: string;
+  hallucinationDetected: boolean;
+  reason?: string;
+} {
+  const trimmed = text.trim();
+
+  // 純標點 → 直接丟棄
+  if (/^[，。！？、…\s]+$/.test(trimmed)) {
+    return { cleaned: "", hallucinationDetected: true, reason: "純標點" };
+  }
+
+  // 找最早的「幻覺起點」並從那裡截斷
+  let cutPoint = trimmed.length;
+  const reasons: string[] = [];
+
+  // (a) 連續 3 個以上日/韓文字符
+  const cjkForeignMatch = trimmed.match(/[぀-ゟ゠-ヿ가-힯ᄀ-ᇿ]{3,}/);
+  if (cjkForeignMatch?.index !== undefined && cjkForeignMatch.index < cutPoint) {
+    cutPoint = cjkForeignMatch.index;
+    reasons.push("日韓文chunk");
+  }
+
+  // (b) 短句連續重複 3 次以上（例如「聽得到嗎?」「嗯?」「我?」）
+  //     抓 1-6 字 + 標點 的句子重複，cover「嗯?嗯?嗯?」與「聽得到嗎?聽得到嗎?」兩類
+  const repeatMatch = trimmed.match(/([\u4e00-\u9fa5]{1,6}[?？！\s]+)\1{2,}/);
+  if (repeatMatch?.index !== undefined && repeatMatch.index < cutPoint) {
+    cutPoint = repeatMatch.index;
+    reasons.push("短句重複");
+  }
+
+  // (c) 「、」連接的短詞列表（4 詞以上、每詞 ≤ 4 字）
+  //     glossary 透過 prompt 回流的典型幻覺：「搖手、可救出、執行屋、掃消隊」
+  const wordListMatch = trimmed.match(/(?:[\u4e00-\u9fa5]{1,4}、){4,}[\u4e00-\u9fa5]{1,4}/);
+  if (wordListMatch?.index !== undefined && wordListMatch.index < cutPoint) {
+    cutPoint = wordListMatch.index;
+    reasons.push("詞表回流");
+  }
+
+  // (d) 同一個字連續重複 8 次以上（如「我我我我我我我我」）
+  const repeatCharMatch = trimmed.match(/(.)\1{7,}/);
+  if (repeatCharMatch?.index !== undefined && repeatCharMatch.index < cutPoint) {
+    cutPoint = repeatCharMatch.index;
+    reasons.push("單字重複");
+  }
+
+  const cleaned = trimmed.slice(0, cutPoint).trim().replace(/[，、]+$/, "");
+
+  if (cutPoint < trimmed.length) {
+    return {
+      cleaned,
+      hallucinationDetected: true,
+      reason: `${reasons.join("+")} @${cutPoint}/${trimmed.length}`,
+    };
+  }
+
+  // 整段檢查：截斷後仍有過多日韓文 → 整段丟棄
+  const japaneseCount = (cleaned.match(/[぀-ゟ゠-ヿ]/g) ?? []).length;
+  const koreanCount = (cleaned.match(/[가-힯ᄀ-ᇿ]/g) ?? []).length;
+  const totalChars = cleaned.replace(/\s/g, "").length || 1;
+  const foreignRatio = (japaneseCount + koreanCount) / totalChars;
+  if (foreignRatio > 0.15) {
+    return {
+      cleaned: "",
+      hallucinationDetected: true,
+      reason: `日韓文比例 ${Math.round(foreignRatio * 100)}%`,
+    };
+  }
+
+  return { cleaned, hallucinationDetected: false };
 }
 
 // ── Keep-alive ping（供 UptimeRobot 監控用）─────────────
@@ -57,35 +154,23 @@ router.get("/ping", (_req, res) => res.json({ ok: true }));
 
 router.get("/turn-credentials", async (_req, res) => {
   try {
-    const domain = process.env.METERED_DOMAIN;     // larp-game.metered.live
+    const domain = process.env.METERED_DOMAIN;       // e.g. larp-game.metered.live
     const secretKey = process.env.METERED_SECRET_KEY;
+
+    console.log("[TURN] domain =", domain);
+    console.log("[TURN] secretKey 前 8 字元 =", secretKey?.slice(0, 8));
+    console.log("[TURN] secretKey 長度 =", secretKey?.length);
 
     if (!domain || !secretKey) {
       console.warn("[TURN] 缺少 Metered 金鑰，使用備援 STUN");
       return res.json({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
     }
 
-    // 步驟一：建立有期限的 credential（7200秒 = 2小時，夠一場遊戲用）
-    const createRes = await fetch(
-      `https://${domain}/api/v1/turn/credential?secretKey=${secretKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expiryInSeconds: 7200 }),
-      }
-    );
-
-    if (!createRes.ok) {
-      throw new Error(`建立 credential 失敗: ${createRes.status}`);
-    }
-
-    const { apiKey } = await createRes.json();
-
-    // 步驟二：用 apiKey 拿 iceServers 陣列
+    // ✅ 正確端點：GET /api/v1/turn/credentials?secretKey=...
     const iceRes = await fetch(
-      `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`
+      `https://${domain}/api/v1/turn/credentials?secretKey=${secretKey}`
     );
 
     if (!iceRes.ok) {
@@ -101,7 +186,7 @@ router.get("/turn-credentials", async (_req, res) => {
   } catch (err: any) {
     console.error("[TURN] 取得 Metered credentials 失敗:", err.message);
     res.json({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
   }
 });
@@ -211,7 +296,8 @@ async function transcribeWithGroq(audioBuffer: Buffer, script: ScriptMeta): Prom
   formData.append("model", "whisper-large-v3-turbo");
   formData.append("language", "zh");
   formData.append("response_format", "text");
-  formData.append("prompt", script.glossary.join("、"));
+  // 🌟 只取前 12 個詞（角色 + 地點為主），避免 glossary 太長導致 Whisper 把詞表當幻覺素材吐回來
+  formData.append("prompt", script.glossary.slice(0, 12).join("、"));
 
   const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
     method: "POST",
@@ -249,7 +335,7 @@ async function correctWithP0STT(rawText: string, script: ScriptMeta): Promise<st
   // 中文每字約 2 token，給足空間避免截斷
   const maxTokens = Math.max(512, Math.ceil(rawText.length * 3));
 
-  const completion = await nvidiaClient.chat.completions.create({
+  const completion = await getNvidiaClient().chat.completions.create({
     model: "meta/llama-3.3-70b-instruct",
     messages: [{ role: "user", content: prompt }],
     temperature: 0.0,
@@ -287,19 +373,20 @@ router.post("/process-voice-turn", upload.single("audio"), async (req, res) => {
 
     if (!rawText.trim()) return res.json({ success: true, text: "" });
 
-    // Whisper 幻覺過濾：靜音時會產生假日韓文，偵測到就丟棄
-    const japaneseCount = (rawText.match(/[぀-ゟ゠-ヿ]/g) ?? []).length;
-    const koreanCount = (rawText.match(/[가-힯ᄀ-ᇿ]/g) ?? []).length;
-    const totalChars = rawText.replace(/\s/g, '').length || 1;
-    const foreignRatio = (japaneseCount + koreanCount) / totalChars;
-    if (foreignRatio > 0.3 || /^[，。！？、…\s]+$/.test(rawText.trim())) {
-      console.warn(`[STT] 偵測到幻覺輸出，已丟棄：「${rawText.slice(0, 30)}」`);
+    // 🌟 Whisper 幻覺清理（截斷已知幻覺起點 + 過濾日韓文 + 詞表回流）
+    const { cleaned, hallucinationDetected, reason } = cleanWhisperHallucination(rawText);
+    if (hallucinationDetected) {
+      console.warn(`[STT] 偵測到幻覺（${reason}）`);
+      console.warn(`[STT] 原文：「${rawText.slice(0, 80)}${rawText.length > 80 ? "..." : ""}」`);
+      console.warn(`[STT] 清理後：「${cleaned.slice(0, 80)}${cleaned.length > 80 ? "..." : ""}」`);
+    }
+    if (!cleaned) {
       return res.json({ success: true, text: "" });
     }
 
-        let correctedText = rawText;
+    let correctedText = cleaned;
     try {
-      correctedText = await correctWithP0STT(rawText, script);
+      correctedText = await correctWithP0STT(cleaned, script);
     } catch (llmErr: any) {
       console.warn("[Voice] STT校正失敗，直接用 ASR 原文：", llmErr.message);
     }

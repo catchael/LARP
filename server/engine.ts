@@ -84,13 +84,13 @@ function buildNvidiaClients(): OpenAI[] {
   const keys: string[] = [];
 
   for (let i = 1; i <= 10; i++) {
-    const k = process.env[`NVIDIA_API_KEY_${i}`];
+    const k = process.env[`NVIDIA_API_KEY_${i}`]?.trim();
     if (k) keys.push(k);
   }
 
   // 向後相容：讀舊的 NVIDIA_API_KEY
   if (keys.length === 0) {
-    const fallback = process.env.NVIDIA_API_KEY;
+    const fallback = process.env.NVIDIA_API_KEY?.trim();
     if (fallback) keys.push(fallback);
   }
 

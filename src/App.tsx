@@ -224,6 +224,8 @@ export default function App() {
   const [reconnectTimeLeft, setReconnectTimeLeft] = useState(0);
 
   // WebRTC Refs
+  // 加在第 227 行附近，其他 Ref 旁邊
+  const icePendingCandidatesRef = useRef<Record<string, RTCIceCandidateInit[]>>({});
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
   const analyserRef = useRef<AnalyserNode | null>(null);
   const currentVolumeRef = useRef(0);
@@ -456,6 +458,8 @@ export default function App() {
   // 🌟 進入 truth_revealed 時立刻儲存對話紀錄與觸發分析，不依賴玩家是否按「離開房間」，確保關掉網頁也能留存資料
   // 🌟 進入 truth_revealed 時儲存對話紀錄與觸發分析
   const hasSavedTruthRef = useRef(false);
+  const truthSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // ← 加這行
+
   useEffect(() => {
     // 透過 Ref 取得最新狀態，確保讀取到的是「當下最新」的資料快照
     const currentUser = userRef.current;
@@ -470,7 +474,7 @@ export default function App() {
     hasSavedTruthRef.current = true;
 
     // 🌟 延遲 3 秒執行，讓最後一句話的 STT 有時間飛回來並更新到 Transcript 中
-    setTimeout(() => {
+    truthSaveTimeoutRef.current = setTimeout(() => {
       // 取得當前劇本資訊與玩家角色名稱
       const currentScript = SCRIPTS.find((s: any) => s.id === currentRoom?.scriptId);
       const scriptTitle = currentScript?.title || '劇本';
@@ -564,9 +568,9 @@ export default function App() {
   }, [phase]);
 
   const resetRoomState = () => {
-
-    if (user?.email) {
-      localStorage.removeItem(`larp_active_room_${user.email}`);
+    const currentUser = userRef.current; // ← 改這行
+    if (currentUser?.email) {
+      localStorage.removeItem(`larp_active_room_${currentUser.email}`);
     }
 
     setDisconnectedUserEmail(null);
@@ -618,6 +622,10 @@ export default function App() {
     setUnlockedCharacterAdvanced([]);
     setShowTieRevoteNotice(false);
     setIsKillerCaught(false);
+    if (truthSaveTimeoutRef.current) {
+      clearTimeout(truthSaveTimeoutRef.current);  // ← 先取消還沒跑完的舊 timeout
+      truthSaveTimeoutRef.current = null;
+    }
     hasSavedTruthRef.current = false; // 🌟 重置，下次遊戲可重新儲存
 
     // 4. 清理 WebRTC 連線與音效資源 (避免聽到上一個房間的聲音)
@@ -902,9 +910,11 @@ export default function App() {
           state.meetingUsers?.forEach((u: any) => {
             if (u.id !== newSocket.id && !u.isAI && !peerConnections.current[u.id]) {
               const currentSocketId = newSocket.id || "";
-              if (currentSocketId < u.id) {
-                createPeerConnection(u.id, newSocket, true); // 我字典序較小，我是禮讓方
-              }
+              state.meetingUsers?.forEach((u: any) => {
+                if (u.id !== newSocket.id && !u.isAI && !peerConnections.current[u.id]) {
+                  createPeerConnection(u.id, newSocket, (newSocket.id ?? '') < u.id);
+                }
+              });
             }
           });
         }
@@ -1091,11 +1101,11 @@ export default function App() {
         }
 
         // 🌟 清空暫存的 ICE Candidate，徹底打通雙向連線
-        if (icePendingCandidates[data.sender]?.length) {
-          for (const c of icePendingCandidates[data.sender]) {
+        if (icePendingCandidatesRef.current[data.sender]?.length) {
+          for (const c of icePendingCandidatesRef.current[data.sender]) {
             await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
           }
-          icePendingCandidates[data.sender] = [];
+          icePendingCandidatesRef.current[data.sender] = [];
         }
       } catch (err) {
         console.error('[WebRTC] offer 處理失敗:', err);
@@ -1109,11 +1119,11 @@ export default function App() {
           await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
           
           // 🌟 確保收到 Answer 後也清空暫存的 ICE
-          if (icePendingCandidates[data.sender]?.length) {
-            for (const c of icePendingCandidates[data.sender]) {
+          if (icePendingCandidatesRef.current[data.sender]?.length) {
+            for (const c of icePendingCandidatesRef.current[data.sender]) {
               await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
             }
-            icePendingCandidates[data.sender] = [];
+            icePendingCandidatesRef.current[data.sender] = [];
           }
         }
       } catch (err) {
@@ -1122,22 +1132,21 @@ export default function App() {
     });
 
     // Buffer ICE candidates until remote description is ready
-    const icePendingCandidates: Record<string, RTCIceCandidateInit[]> = {};
     newSocket.on('webrtc_ice', async (data: { sender: string, candidate: RTCIceCandidateInit }) => {
       const pc = peerConnections.current[data.sender];
       if (pc && pc.remoteDescription) {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.warn('ICE error', e));
         // Flush any buffered candidates
-        if (icePendingCandidates[data.sender]?.length) {
-          for (const c of icePendingCandidates[data.sender]) {
+        if (icePendingCandidatesRef.current[data.sender]?.length) {
+          for (const c of icePendingCandidatesRef.current[data.sender]) {
             await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
           }
-          icePendingCandidates[data.sender] = [];
+          icePendingCandidatesRef.current[data.sender] = [];
         }
       } else {
         // Buffer until remote description is set
-        if (!icePendingCandidates[data.sender]) icePendingCandidates[data.sender] = [];
-        icePendingCandidates[data.sender].push(data.candidate);
+        if (!icePendingCandidatesRef.current[data.sender]) icePendingCandidatesRef.current[data.sender] = [];
+        icePendingCandidatesRef.current[data.sender].push(data.candidate);
       }
     });
 
